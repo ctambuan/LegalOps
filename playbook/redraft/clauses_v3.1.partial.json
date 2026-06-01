@@ -452,5 +452,45 @@
   "sellside": "Company Cost Pass-Through. Where a change in law materially and demonstrably increases the Company's cost of providing the Services, the Company may: (a) notify the Counterparty of the impact and a proposed fee adjustment; and (b) if the Counterparty does not agree to the adjustment within [thirty (30)] days, terminate on [sixty (60)] days' notice.",
   "fallback": "Equitable Cost Adjustment. Where a change in law imposes materially new and verifiable obligations on both Parties, the Parties shall agree an equitable adjustment to the Fees, with the scope and cost agreed and documented.",
   "counselNotes": ""
+ },
+ "56": {
+  "title": "Assignment, Novation, Transfer and Change of Control",
+  "baseline": "Assignment, Novation, Transfer and Change of Control. Neither Party may assign, novate, transfer, sub-licence or otherwise deal with its rights or obligations under this Agreement without the other Party's prior written consent, except that the Company may assign or transfer its rights and obligations to: (a) a Company Affiliate; (b) a successor entity following a merger, reorganisation or transfer of all or substantially all of the Company's business to which this Agreement relates; or (c) as required in connection with financing, securitisation or group restructuring. Any purported assignment in breach of this Clause is void.",
+  "buyside": "Assignment Controls. In addition: (a) the Counterparty shall not assign or transfer to a Company competitor, a sanctioned entity, or an entity that creates legal, regulatory or reputational risk for the Company; (b) a Change of Control of the Counterparty shall be treated as an assignment requiring the Company's consent; and (c) the Company may withhold consent to any assignment where it determines, in its reasonable judgement, that the proposed assignee does not meet its due-diligence, regulatory or security standards.",
+  "sellside": "Company Assignment Freedom. The Company may assign or transfer its rights and obligations to any Company entity or any successor as part of a group reorganisation without consent. The Counterparty shall not assign, transfer, novate or subcontract its obligations without the Company's prior written consent.",
+  "fallback": "",
+  "counselNotes": "Permit assignment to existing Company Affiliates or intra-group restructuring without consent. The Counterparty may be permitted to assign to a non-competitor that demonstrates equivalent capability and creditworthiness, subject to the Company's right to conduct due diligence."
+ },
+ "57": {
+  "title": "Relationship of Parties; No Partnership, Agency or Fiduciary Duty",
+  "baseline": "Relationship of the Parties. The Parties are independent contractors. Nothing in this Agreement creates, or is intended to create, a partnership, joint venture, employment relationship, agency, trust, fiduciary relationship or association, or any authority for either Party to bind, represent or act on behalf of the other, unless expressly stated.",
+  "buyside": "No Counterparty Authority. The Counterparty has no authority to: (a) make any representation, warranty or commitment on behalf of the Company; (b) bind the Company to any contract, obligation or communication; (c) hold itself out as the Company's agent, representative, distributor or partner without the Company's written consent; or (d) conduct any regulated activity on behalf of the Company or through the Company's licence.",
+  "sellside": "No Company Advisory or Fiduciary Role. The Company does not provide investment advice, financial planning, tax advice, custodial services, brokerage, dealing, trust services, fiduciary services or any other regulated or advisory service to the Counterparty through this Agreement, unless expressly and separately agreed and licensed.",
+  "fallback": "",
+  "counselNotes": "For referral, marketing and introducer arrangements, add express limitations on the Counterparty's authority to make regulated statements, financial promotions or product claims on behalf of the Company."
+ },
+ "58": {
+  "title": "Notices",
+  "baseline": "Notices. Notices under this Agreement must be in writing and delivered by: (a) hand delivery; (b) reputable overnight courier; (c) registered or certified mail; or (d) email to the address specified in this Agreement, with read receipt or delivery confirmation. Notices are effective on confirmed delivery or, for email, on receipt of a delivery confirmation or read receipt from the intended recipient. Each Party shall maintain up-to-date notice addresses and promptly notify the other of any change.",
+  "buyside": "Copies to Legal. All formal notices (including breach notices, termination notices, claims and regulatory notices) shall be copied to: (a) the Company's Legal team at [legal@company-domain] (or as updated by the Company); and (b) the Counterparty's General Counsel or Legal department at [address]. A notice sent to business contacts only, without a copy to Legal, shall not be effective for formal breach, termination or claim purposes.",
+  "sellside": "Operational Notices. The Company may give operational notices (including SLA reports, invoices, product updates and non-material communications) by email to the Counterparty's designated operational contact. Formal breach, termination, indemnity and regulatory notices require the formal notice procedure above.",
+  "fallback": "",
+  "counselNotes": "Email is acceptable for ordinary communications, but require a copy to Legal for any notice of breach, termination, claim or regulatory matter."
+ },
+ "59": {
+  "title": "Entire Agreement",
+  "baseline": "Entire Agreement. This Agreement constitutes the entire agreement between the Parties with respect to its subject matter and supersedes all prior and contemporaneous agreements, proposals, negotiations, representations, warranties and communications, whether oral or written, relating to that subject matter. Each Party acknowledges that it has not relied on any representation, warranty or statement not expressly set out in this Agreement in entering into it; this Clause does not limit or exclude liability for fraud or fraudulent misrepresentation.",
+  "buyside": "Non-Reliance (Company). The Company has not relied on any product claim, technology-performance guarantee, regulatory assurance, feasibility statement, reference implementation or marketing material provided by the Counterparty that is not expressly included in this Agreement. Any such representation must be documented in a Schedule or warranty in this Agreement before signature.",
+  "sellside": "Non-Reliance (Counterparty). The Counterparty has not relied on any representation by the Company as to anticipated usage volumes, revenue projections, customer acquisition, market performance or business outcomes that is not expressly stated in this Agreement.",
+  "fallback": "",
+  "counselNotes": "A standard entire-agreement clause is acceptable provided that: (a) the fraud carve-out is preserved; and (b) all agreed business terms are documented in the contract before signature."
+ },
+ "60": {
+  "title": "Amendments and Variations",
+  "baseline": "Amendments and Variations. No amendment, modification, variation, waiver or supplement to this Agreement is valid or binding unless made in writing and signed by an authorised representative of each Party. No act, omission, conduct or course of dealing shall constitute an amendment or waiver unless documented in accordance with this Clause.",
+  "buyside": "Amendment Controls. Amendments affecting price, scope, the Service Levels, liability, data flows, security architecture, regulatory obligations, subcontracting or any other material term require: (a) the Company's Legal review and sign-off; and (b) signature by a signatory with authority under the Company's delegation of authority. The Company does not accept \"click-to-accept\", or continued use of the Services, as a mechanism for amending negotiated contractual terms.",
+  "sellside": "Company Policy Amendments. The Company may amend its acceptable-use policy, security requirements and platform policies on [thirty (30)] days' notice. Amendments to negotiated core terms (pricing, liability, IP, data, termination) require mutual written agreement.",
+  "fallback": "",
+  "counselNotes": "Operational change orders are acceptable provided they are signed by authorised representatives and do not affect legal, regulatory, security, liability or pricing terms."
  }
 }
