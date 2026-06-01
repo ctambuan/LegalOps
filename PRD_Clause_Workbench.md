@@ -117,7 +117,9 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
   Firebase's public keys); the **client then writes the clauses under the user's own Firestore
   session**, so security rules confirm a reviewer. No service-account key, no CLI, no public path.
   Runs automatically for a reviewer when the library is empty.
-- Document export: client-side .docx generation (docx library); place into the Drive folder.
+- Document export: client-side .docx generation (docx library); download, or **save directly to the
+  Drive folder** via the reviewer's Google OAuth token with the `drive.file` scope (no service-account
+  key). Gated by `NEXT_PUBLIC_DRIVE_UPLOAD` (OI1).
 - AI assist (Claude): a server route (`app/api/assist`, same Firebase-ID-token gate as `/api/seed`)
   calls the Anthropic Claude API (`claude-opus-4-8`, adaptive thinking, prompt-cached house-style
   system prompt) for four modes — draft, improve, review, explain. The `ANTHROPIC_API_KEY` is
@@ -170,10 +172,13 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 
 ## 11. Open Items / Risks (must be resolved before go-live)
 
-- OI1. **Drive write authorisation.** RESOLVED for record-keeping (2026-06-01): the Drive connector now
-  authenticates and writes to the configured project folder (this PRD and project records were written
-  there). Still to confirm: whether the in-app master .docx export should write to the same Shared Drive
-  folder via the same credential/scope, and the Shared-Drive vs normal-folder write-permission distinction.
+- OI1. **Drive write authorisation.** RESOLVED (2026-06-01): record-keeping writes go to the configured
+  project folder via the connector; and the in-app master `.docx` export can now **save directly to the
+  Drive folder** using the reviewer's own Google sign-in with the narrow `drive.file` OAuth scope (enabled
+  on the consent screen 2026-06-01) — no service-account key (org policy compliant). Gated by
+  `NEXT_PUBLIC_DRIVE_UPLOAD`; target folder via `NEXT_PUBLIC_DRIVE_FOLDER_ID`. Note: `drive.file` lets the
+  app write files it creates into the folder; if the folder is a Shared Drive, uploads use
+  `supportsAllDrives=true`. Verify in production that the reviewer's account has write access to the folder.
 - OI2. **Privileged data in Google Drive + Firebase.** RESOLVED (2026-06-01): the Head of Legal has
   reviewed and accepted storing privileged legal data in (a) the dedicated **"Legal Operations Workbench"**
   Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`) — the canonical Drive location, to which the
@@ -226,6 +231,8 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-01 | v3.1 (engine) | Contracting Engine corrected to reflect the live v3.1 master. (a) **Version stamping fixed:** "Re-sync from master" was writing every clause to Firestore labelled `v3.0` (the seed JSON carries no version field and the writer defaulted to a literal "v3.0"), and adopted addenda were likewise stamped `v3.0`, despite the seed content being the v3.1 redraft. Introduced a single env-overridable `PLAYBOOK_VERSION_TAG` (now `v3.1`) used for both the clause re-sync stamp and the adopted-addenda stamp, and bumped the display `PLAYBOOK_VERSION` default to `v3.1 (01 Jun 2026)`. Confirmed the Drive folder's current master is `...v3.1_2026-06-01.docx`. (b) **Library-card tags now reflect each clause's own templates:** cards previously hardcoded five tags (Baseline/Buy-Side/Sell-Side/Fallback/Red Flags) lit on/off by flat fields, so clauses with bespoke models (CL-05 Term's Model 1–4) showed wrong/empty tags. A single `clauseTemplates()` helper now drives both the card tags and the clause-detail tabs from the same source (a clause's `variants` when defined, else the standard positions with text), so tags and tabs always match; CL-05 shows its model labels (shortened to "Model 1"…"Model 4" on the card, full label in the tab and on hover); tags carry tier-colour dots. (c) Manual `.docx → seed JSON` + version-tag release checklist documented in `/playbook/README.md`; OI5 updated to PARTIALLY ADDRESSED. Section 8 data model updated to record `variants[]`, usageNotes and counselNotes. Lint, build and type-check pass clean. No change to the anti-drift model: re-sync reloads the derived seed JSON (by design), not live from Drive. | AI eng |
 
 | 2026-06-01 | v3.1 (AI assist) | Added an optional Claude-powered assist to the Contracting Engine (PRD OI6, accepted by the Head of Legal). New server route `app/api/assist` (Node runtime, same Firebase-ID-token gate as `/api/seed`, `ANTHROPIC_API_KEY` server-side only) calls the Anthropic API (`claude-opus-4-8`, adaptive thinking, prompt-cached house-style system prompt) in four modes — **draft** a new clause, **improve/fallback** an existing one, **review** a counterparty's clause for risks (severity-tagged), and **explain** a clause. UI: a "✨ Draft with Claude" action on the Contribute form (operative text → text field; any "Notes for Counsel" → rationale), and an "Ask Claude" panel in the clause detail (Explain / Review a counterparty version). All outputs are labelled AI working drafts with no authority until human review/adoption; nothing is sent externally unless a user clicks an AI action. Shared Firebase-token verifier extracted to `lib/verifyIdToken.js` (used by both `/api/seed` and `/api/assist`). Feature is disablable via `NEXT_PUBLIC_AI_ASSIST=off` or by unsetting the key. Added `@anthropic-ai/sdk`. Lint/build/type-check clean. New open item OI6 logged for the privileged-text egress. | AI eng (accepted by Head of Legal) |
+
+| 2026-06-01 | v3.1 (Drive export) | In-app **Save to Drive** for the master export (OI1 resolved). The reviewer's Google sign-in now requests the narrow `drive.file` OAuth scope (enabled on the consent screen); the master `.docx` uploads straight into the "Legal Operations Workbench" folder under the reviewer's identity via the Drive REST API — no service-account key (org-policy compliant). New `lib/driveUpload.js`; `lib/auth.js` captures/refreshes the Google OAuth access token and exposes `getDriveAccessToken()`; `lib/firebase.js` adds the scope when enabled; `exportMaster()` now returns `{blob, filename}` so the same artefact can be downloaded or uploaded. Gated by `NEXT_PUBLIC_DRIVE_UPLOAD` (default off) with `NEXT_PUBLIC_DRIVE_FOLDER_ID`. 401s trigger a one-time token refresh + retry. Each save is logged to the audit trail. Lint/build/type-check clean. | AI eng (Drive scope enabled by Head of Legal) |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*

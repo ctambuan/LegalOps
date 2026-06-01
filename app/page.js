@@ -8,9 +8,10 @@ import {
   createProposal, transitionProposal, logExport, seedClausesViaApi,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
-import { COMPANY_LABEL, AI_ASSIST_ENABLED } from "../lib/config";
+import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
 import { exportMaster } from "../lib/exportDocx";
 import { callAssist } from "../lib/assist";
+import { uploadDocxToDrive } from "../lib/driveUpload";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
@@ -558,22 +559,49 @@ function ReviewCard({ p, open, toggle, act }) {
 
 /* ---------------- Master & Export ---------------- */
 function Master({ adopted, isReviewer, user, showToast }) {
+  const { getDriveAccessToken } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
   const run = async () => {
     setBusy(true);
     try { await exportMaster(adopted); await logExport(user, adopted.length); showToast("Master .docx generated — place in Drive folder"); }
     catch (e) { console.error(e); showToast("Export failed — see console"); }
     setBusy(false);
   };
+  // Save the master straight into the Drive folder under the reviewer's identity (drive.file).
+  const saveToDrive = async () => {
+    setDriveBusy(true);
+    try {
+      const { blob, filename } = await exportMaster(adopted, { download: false });
+      let token = await getDriveAccessToken();
+      let file;
+      try {
+        file = await uploadDocxToDrive(blob, filename, token, DRIVE_FOLDER_ID);
+      } catch (e) {
+        if (e.status === 401) { // token expired — refresh once and retry
+          token = await getDriveAccessToken({ forceRefresh: true });
+          file = await uploadDocxToDrive(blob, filename, token, DRIVE_FOLDER_ID);
+        } else { throw e; }
+      }
+      await logExport(user, adopted.length);
+      showToast(`Saved to Drive: ${file.name}`);
+    } catch (e) { console.error(e); showToast(e.message || "Drive save failed — see console"); }
+    setDriveBusy(false);
+  };
   return (
     <>
       <div className="lockmsg">This is the <b>adopted master</b> — the live record of positions the Head of Legal has
-        approved as addenda to Playbook {PLAYBOOK_VERSION}. Export the full master as a formatted .docx and place it into the Drive
-        folder. Each export is logged in the audit trail.</div>
+        approved as addenda to Playbook {PLAYBOOK_VERSION}. Export the full master as a formatted .docx{DRIVE_UPLOAD_ENABLED ? " — or save it straight into the Drive folder" : " and place it into the Drive folder"}.
+        Each export is logged in the audit trail.</div>
       <div className="statbar">
         <div className="stat"><div className="n">{adopted.length}</div><div className="l">Adopted positions</div></div>
         <div className="stat"><div className="n">{new Set(adopted.map((m) => m.title)).size}</div><div className="l">Distinct clauses</div></div>
-        <div style={{ marginLeft: "auto" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "10px" }}>
+          {DRIVE_UPLOAD_ENABLED && (
+            <button className="btn" onClick={saveToDrive} disabled={!adopted.length || driveBusy || busy}
+              title="Upload the master .docx into the Legal Operations Workbench Drive folder">
+              {driveBusy ? "Saving…" : "Save to Drive ↑"}</button>
+          )}
           <button className="btn primary" onClick={run} disabled={!adopted.length || busy}>{busy ? "Generating…" : "Export Master .docx ↓"}</button>
         </div>
       </div>
