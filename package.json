@@ -1,0 +1,30 @@
+{
+  "name": "clause-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clause Library Workbench — proposal-and-adoption layer over the Contract Review Playbook. Confidential & Legally Privileged.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "seed": "node scripts/seed.mjs",
+    "setclaims": "node scripts/setReviewer.mjs"
+  },
+  "dependencies": {
+    "docx": "8.5.0",
+    "file-saver": "2.0.5",
+    "firebase": "10.12.4",
+    "next": "^15.5.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "eslint": "8.57.0",
+    "eslint-config-next": "^15.5.7",
+    "firebase-admin": "12.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
