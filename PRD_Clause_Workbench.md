@@ -114,7 +114,7 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
   session**, so security rules confirm a reviewer. No service-account key, no CLI, no public path.
   Runs automatically for a reviewer when the library is empty.
 - Document export: client-side .docx generation (docx library); place into the Drive folder.
-- Records (PRD, change log, exports): **Google Drive** (the configured Drive folder).
+- Records (PRD, change log, exports): **Google Drive** — the dedicated **"Legal Operations Workbench"** folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`).
 
 Rationale: Next.js on Vercel gives a fast, modern, maintainable SPA/SSR hybrid with first-class DX;
 Firestore gives realtime multi-user sync and rule-based security without standing up a server;
@@ -162,9 +162,10 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
   authenticates and writes to the configured project folder (this PRD and project records were written
   there). Still to confirm: whether the in-app master .docx export should write to the same Shared Drive
   folder via the same credential/scope, and the Shared-Drive vs normal-folder write-permission distinction.
-- OI2. **Privileged data into personal Drive + Firebase.** RESOLVED (2026-06-01): the Head of Legal
-  has reviewed and accepted storing privileged legal data in (a) the personal-named Google Drive folder
-  ("04. Christine Personal File", within the Shared Drive) and (b) Firebase. This is recorded as a
+- OI2. **Privileged data in Google Drive + Firebase.** RESOLVED (2026-06-01): the Head of Legal has
+  reviewed and accepted storing privileged legal data in (a) the dedicated **"Legal Operations Workbench"**
+  Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`) — the canonical Drive location, to which the
+  records were moved on 2026-06-01 from the personal-named folder — and (b) Firebase. Recorded as a
   Head-of-Legal decision; no further DPO routing required for v1 on this point.
 - OI3. **Data residency vs Firebase Auth global service.** RESOLVED (2026-06-01): the Head of Legal has
   accepted that Firestore data resides in Jakarta (asia-southeast2) while Firebase Authentication runs as
@@ -193,6 +194,8 @@ re-seed of the derived `clauses` collection when the master version bumps). Reco
 the access safety test; add team members; replace the `[Company]` label with the real organisation name.
 
 | 2026-06-01 | v3.1 (Playbook) | Full magic-circle redraft of all 74 clauses completed and deployed live, in 15 reviewed cohorts: every template made operative and paste-ready, consistent defined terms (the Company / the Counterparty / this Agreement etc.), UK/Commonwealth spelling, (a)/(i) numbering, cross-refs as `Clause [●] (Title)`; guidance separated into Notes for Counsel; risk-allocation cluster (CL-36–40) elevated; CL-05 Term recovered as Model 1–4 tabs. Master Playbook re-issued as **v3.1** (`/playbook/00.01_..._v3.1_2026-06-01.docx`): clause bodies replaced in place from the redrafted set; all front matter, methodology, negotiation matrix, glossary, headers/footers and numbering preserved; validated. Dashboard and master now carry the same clause content. | AI eng (redraft adopted by Head of Legal) |
+
+| 2026-06-01 | v3.1 (record) | Drive records reorganised into a dedicated **"Legal Operations Workbench"** Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`), now the canonical Drive location (superseding the personal-named folder; records moved by the Head of Legal). File-naming convention adopted for Drive records: **"Legal Operations Workbench - PRD v[X].[Y] - [YYYY-MM-DD]"** (and analogous for other artefacts). Drive-location references in this PRD (Section 7, OI2) updated accordingly. | AI eng |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
