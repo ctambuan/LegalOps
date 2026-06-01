@@ -1,6 +1,6 @@
 # Product Requirements Document — Clause Library Workbench (Contracting Engine)
 
-**Status:** v0.6 — LIVE (deployed to production; in early team rollout)
+**Status:** LIVE (deployed to production; in early team rollout). App v0.6; Playbook v3.1 — all 74 clauses redrafted.
 **Live URL:** https://legal-ops-two.vercel.app/
 **Product positioning:** This PRD covers the **Contracting Engine**, the first live module of the
 broader **Legal Operations Workbench**. Three further modules are scaffolded as "To Be Developed":
@@ -8,7 +8,7 @@ Document Number Generator, Compliance Tracker, Budget Tracker.
 **Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not Legal Department position)
 **Classification:** Confidential & Legally Privileged — [Company] internal use only
-**Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.0 (08 May 2026)
+**Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.1 (01 Jun 2026)
 **Last updated:** see Change Log (Section 12)
 
 > This PRD is the single controlling record for the Workbench. Every architectural, product, or
@@ -21,7 +21,7 @@ Document Number Generator, Compliance Tracker, Budget Tracker.
 
 ## 1. Problem Statement
 
-The Playbook v3.0 is the authoritative, privileged source of [Company]'s contracting positions. Today,
+The Playbook (now v3.1) is the authoritative, privileged source of [Company]'s contracting positions. Today,
 collaborative improvement of that library is constrained: a Project-based AI workspace is siloed to a
 single user, and there is no governed, multi-user pathway for the legal team to propose clause
 improvements, additional fallbacks, conditional expansions, and net-new clauses, route them to the
@@ -31,7 +31,7 @@ drift from, or contamination of, the Playbook itself.
 ## 2. Goals & Non-Goals
 
 **Goals**
-- G1. Let authorised team members retrieve any Playbook v3.0 clause with its four-tier variants.
+- G1. Let authorised team members retrieve any Playbook clause (current master: v3.1) with its variants.
 - G2. Let team members submit four contribution types: improvement, additional fallback,
   conditional expansion, new clause — each carrying proposed tier and classification.
 - G3. Route every submission to a Head-of-Legal-only review queue with approve / request-changes /
@@ -44,7 +44,7 @@ drift from, or contamination of, the Playbook itself.
 
 **Non-Goals (v1)**
 - NG1. The Workbench does NOT overwrite or replace the Playbook. It is a proposal-and-adoption layer
-  on top of it. Adopted items are stamped as addenda to v3.0.
+  on top of it. Adopted items are stamped as addenda with the current Playbook version (now v3.1).
 - NG2. No automated legal advice. No auto-approval. Human (Head of Legal) adoption is mandatory.
 - NG3. No real-time co-editing of the same clause text (Google-Docs-style OT/CRDT) in v1.
 - NG4. No public access. No external counterparty access.
@@ -61,8 +61,8 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 
 ## 4. Source-of-Truth & Anti-Drift Principle (critical)
 
-- The clause library is seeded from Playbook v3.0 (74 clauses parsed: Baseline, Buy-Side, Sell-Side,
-  Fallback, Red Flags, Purpose).
+- The clause library is seeded from the master Playbook (now v3.1; 74 clauses: Baseline, Buy-Side,
+  Sell-Side, Fallback, Red Flags, Purpose, plus clause-specific Models where defined, e.g. CL-05 Term).
 - Seed data is treated as READ-ONLY reference. Contributions never mutate seed records; they create
   separate proposal records that reference a seed clause by id.
 - Adopted positions are stored as ADDENDA with explicit linkage to the Playbook clause and a version
@@ -87,6 +87,10 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 - FR5. Master addenda: approved items collected; list + detail; export to formatted .docx; write to
   Google Drive (the configured Drive folder); each export logged.
 - FR6. Audit trail: every state transition recorded (who, what, when) and immutable.
+- FR7. AI assist (optional; PRD OI6): authenticated users may invoke Claude to draft a new clause,
+  improve/fallback an existing clause, review a counterparty's clause for risks, or explain a clause.
+  Outputs are working drafts that pre-fill the proposal form (draft/improve) or display read-only
+  (review/explain); they carry no authority until reviewed and adopted. Server-side key; disablable.
 
 ## 6. Non-Functional Requirements
 
@@ -113,7 +117,14 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
   Firebase's public keys); the **client then writes the clauses under the user's own Firestore
   session**, so security rules confirm a reviewer. No service-account key, no CLI, no public path.
   Runs automatically for a reviewer when the library is empty.
-- Document export: client-side .docx generation (docx library); place into the Drive folder.
+- Document export: client-side .docx generation (docx library); download, or **save directly to the
+  Drive folder** via the reviewer's Google OAuth token with the `drive.file` scope (no service-account
+  key). Gated by `NEXT_PUBLIC_DRIVE_UPLOAD` (OI1).
+- AI assist (Claude): a server route (`app/api/assist`, same Firebase-ID-token gate as `/api/seed`)
+  calls the Anthropic Claude API (`claude-opus-4-8`, adaptive thinking, prompt-cached house-style
+  system prompt) for four modes — draft, improve, review, explain. The `ANTHROPIC_API_KEY` is
+  server-only; outputs are AI working drafts subject to human review (PRD OI6). Disable by unsetting
+  the key or `NEXT_PUBLIC_AI_ASSIST=off`.
 - Records (PRD, change log, exports): **Google Drive** — the dedicated **"Legal Operations Workbench"** folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`).
 
 Rationale: Next.js on Vercel gives a fast, modern, maintainable SPA/SSR hybrid with first-class DX;
@@ -124,12 +135,15 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 ## 8. Data Model (Firestore)
 
 - `clauses/{id}` — seed reference (read-only): title, cat, purpose, baseline, buyside, sellside,
-  fallback, redflags, playbookVersion.
+  fallback, redflags, usageNotes, counselNotes, playbookVersion, and optional `variants[]`
+  (clause-specific labelled drafting models, e.g. CL-05 Term's Model 1–4 — each `{label, tier, note,
+  text}`). The clause-detail tabs and the library-card tags are both derived from `variants` when
+  present, otherwise from the standard positions that have text — a single source so they always match.
 - `proposals/{id}` — type, jurisdiction, title, baseRef, tier, classification, text, rationale,
   redflag, originalText, status, authorEmail, authorName, createdAt, reviewedAt, reviewerEmail,
   reviewNote.
-- `adopted/{id}` — snapshot of approved proposal + adoptedAt, adoptedByEmail, playbookVersion,
-  addendumNumber.
+- `adopted/{id}` — snapshot of approved proposal + adoptedAt, adoptedByEmail, playbookVersion
+  (stamped from `PLAYBOOK_VERSION_TAG`). Addenda are numbered sequentially at export time, not stored.
 - `audit/{id}` — append-only: actorEmail, action, targetType, targetId, fromStatus, toStatus, at.
 - `allowlist/{email}` — role: 'contributor' | 'reviewer'. Drives access + claims.
 
@@ -158,10 +172,13 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 
 ## 11. Open Items / Risks (must be resolved before go-live)
 
-- OI1. **Drive write authorisation.** RESOLVED for record-keeping (2026-06-01): the Drive connector now
-  authenticates and writes to the configured project folder (this PRD and project records were written
-  there). Still to confirm: whether the in-app master .docx export should write to the same Shared Drive
-  folder via the same credential/scope, and the Shared-Drive vs normal-folder write-permission distinction.
+- OI1. **Drive write authorisation.** RESOLVED (2026-06-01): record-keeping writes go to the configured
+  project folder via the connector; and the in-app master `.docx` export can now **save directly to the
+  Drive folder** using the reviewer's own Google sign-in with the narrow `drive.file` OAuth scope (enabled
+  on the consent screen 2026-06-01) — no service-account key (org policy compliant). Gated by
+  `NEXT_PUBLIC_DRIVE_UPLOAD`; target folder via `NEXT_PUBLIC_DRIVE_FOLDER_ID`. Note: `drive.file` lets the
+  app write files it creates into the folder; if the folder is a Shared Drive, uploads use
+  `supportsAllDrives=true`. Verify in production that the reviewer's account has write access to the folder.
 - OI2. **Privileged data in Google Drive + Firebase.** RESOLVED (2026-06-01): the Head of Legal has
   reviewed and accepted storing privileged legal data in (a) the dedicated **"Legal Operations Workbench"**
   Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`) — the canonical Drive location, to which the
@@ -171,8 +188,22 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
   accepted that Firestore data resides in Jakarta (asia-southeast2) while Firebase Authentication runs as
   a global service. Acceptable for v1.
 - OI4. **Allowlist governance.** Who maintains the allowlist; offboarding process.
-- OI5. **Playbook update process.** When Playbook v3.1 issues, how is the seed re-synced without
-  losing adopted addenda linkage.
+- OI5. **Playbook update process.** PARTIALLY ADDRESSED (2026-06-01): the manual `.docx → seed JSON`
+  re-sync + version-tag bump is now a documented release checklist in `/playbook/README.md`, and the
+  app stamps re-synced clauses and adopted addenda with a single env-overridable `PLAYBOOK_VERSION_TAG`
+  (now `v3.1`) — so "Re-sync from master" reloads the current clause text and labels it correctly (it
+  reloads from the derived seed JSON, by design, not live from Drive). Still open: preserving adopted-
+  addenda linkage across a version bump (each addendum keeps the `playbookVersion` stamp it was adopted
+  under, but there is no automated re-mapping of an addendum onto a re-numbered/redrafted clause).
+- OI6. **Privileged clause text sent to the Claude (Anthropic) API.** ACCEPTED (2026-06-01): the Head of
+  Legal has accepted that, when a user invokes the in-app AI assist (draft / improve / review / explain),
+  the relevant clause text is sent to Anthropic's Claude API over TLS to generate a **working draft**.
+  Controls: the `ANTHROPIC_API_KEY` is server-side only (never in the browser bundle); the assist route
+  requires a valid Firebase ID token for this project; no data is sent unless a user explicitly clicks an
+  AI action; outputs are labelled AI working drafts and carry no authority until a human reviews/adopts
+  them. Anthropic's API does not train on submitted data; confirm the organisation's data-retention
+  setting (zero-retention if required) and that this egress is acceptable alongside OI2/OI3. The feature
+  can be disabled entirely by unsetting `ANTHROPIC_API_KEY` or `NEXT_PUBLIC_AI_ASSIST=off`.
 
 ## 12. Change Log
 
@@ -196,6 +227,12 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-01 | v3.1 (Playbook) | Full magic-circle redraft of all 74 clauses completed and deployed live, in 15 reviewed cohorts: every template made operative and paste-ready, consistent defined terms (the Company / the Counterparty / this Agreement etc.), UK/Commonwealth spelling, (a)/(i) numbering, cross-refs as `Clause [●] (Title)`; guidance separated into Notes for Counsel; risk-allocation cluster (CL-36–40) elevated; CL-05 Term recovered as Model 1–4 tabs. Master Playbook re-issued as **v3.1** (`/playbook/00.01_..._v3.1_2026-06-01.docx`): clause bodies replaced in place from the redrafted set; all front matter, methodology, negotiation matrix, glossary, headers/footers and numbering preserved; validated. Dashboard and master now carry the same clause content. | AI eng (redraft adopted by Head of Legal) |
 
 | 2026-06-01 | v3.1 (record) | Drive records reorganised into a dedicated **"Legal Operations Workbench"** Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`), now the canonical Drive location (superseding the personal-named folder; records moved by the Head of Legal). File-naming convention adopted for Drive records: **"Legal Operations Workbench - PRD v[X].[Y] - [YYYY-MM-DD]"** (and analogous for other artefacts). Drive-location references in this PRD (Section 7, OI2) updated accordingly. | AI eng |
+
+| 2026-06-01 | v3.1 (engine) | Contracting Engine corrected to reflect the live v3.1 master. (a) **Version stamping fixed:** "Re-sync from master" was writing every clause to Firestore labelled `v3.0` (the seed JSON carries no version field and the writer defaulted to a literal "v3.0"), and adopted addenda were likewise stamped `v3.0`, despite the seed content being the v3.1 redraft. Introduced a single env-overridable `PLAYBOOK_VERSION_TAG` (now `v3.1`) used for both the clause re-sync stamp and the adopted-addenda stamp, and bumped the display `PLAYBOOK_VERSION` default to `v3.1 (01 Jun 2026)`. Confirmed the Drive folder's current master is `...v3.1_2026-06-01.docx`. (b) **Library-card tags now reflect each clause's own templates:** cards previously hardcoded five tags (Baseline/Buy-Side/Sell-Side/Fallback/Red Flags) lit on/off by flat fields, so clauses with bespoke models (CL-05 Term's Model 1–4) showed wrong/empty tags. A single `clauseTemplates()` helper now drives both the card tags and the clause-detail tabs from the same source (a clause's `variants` when defined, else the standard positions with text), so tags and tabs always match; CL-05 shows its model labels (shortened to "Model 1"…"Model 4" on the card, full label in the tab and on hover); tags carry tier-colour dots. (c) Manual `.docx → seed JSON` + version-tag release checklist documented in `/playbook/README.md`; OI5 updated to PARTIALLY ADDRESSED. Section 8 data model updated to record `variants[]`, usageNotes and counselNotes. Lint, build and type-check pass clean. No change to the anti-drift model: re-sync reloads the derived seed JSON (by design), not live from Drive. | AI eng |
+
+| 2026-06-01 | v3.1 (AI assist) | Added an optional Claude-powered assist to the Contracting Engine (PRD OI6, accepted by the Head of Legal). New server route `app/api/assist` (Node runtime, same Firebase-ID-token gate as `/api/seed`, `ANTHROPIC_API_KEY` server-side only) calls the Anthropic API (`claude-opus-4-8`, adaptive thinking, prompt-cached house-style system prompt) in four modes — **draft** a new clause, **improve/fallback** an existing one, **review** a counterparty's clause for risks (severity-tagged), and **explain** a clause. UI: a "✨ Draft with Claude" action on the Contribute form (operative text → text field; any "Notes for Counsel" → rationale), and an "Ask Claude" panel in the clause detail (Explain / Review a counterparty version). All outputs are labelled AI working drafts with no authority until human review/adoption; nothing is sent externally unless a user clicks an AI action. Shared Firebase-token verifier extracted to `lib/verifyIdToken.js` (used by both `/api/seed` and `/api/assist`). Feature is disablable via `NEXT_PUBLIC_AI_ASSIST=off` or by unsetting the key. Added `@anthropic-ai/sdk`. Lint/build/type-check clean. New open item OI6 logged for the privileged-text egress. | AI eng (accepted by Head of Legal) |
+
+| 2026-06-01 | v3.1 (Drive export) | In-app **Save to Drive** for the master export (OI1 resolved). The reviewer's Google sign-in now requests the narrow `drive.file` OAuth scope (enabled on the consent screen); the master `.docx` uploads straight into the "Legal Operations Workbench" folder under the reviewer's identity via the Drive REST API — no service-account key (org-policy compliant). New `lib/driveUpload.js`; `lib/auth.js` captures/refreshes the Google OAuth access token and exposes `getDriveAccessToken()`; `lib/firebase.js` adds the scope when enabled; `exportMaster()` now returns `{blob, filename}` so the same artefact can be downloaded or uploaded. Gated by `NEXT_PUBLIC_DRIVE_UPLOAD` (default off) with `NEXT_PUBLIC_DRIVE_FOLDER_ID`. 401s trigger a one-time token refresh + retry. Each save is logged to the audit trail. Lint/build/type-check clean. | AI eng (Drive scope enabled by Head of Legal) |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*

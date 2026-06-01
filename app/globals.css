@@ -105,8 +105,12 @@ select:focus{outline:none;border-color:var(--ink3)}
 .cpurpose{font-size:12.5px;color:var(--ink2);line-height:1.5;flex:1;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .cvariants{display:flex;gap:6px;flex-wrap:wrap}
-.vtag{font-size:10.5px;letter-spacing:.03em;padding:3px 9px;border-radius:20px;border:1px solid var(--line);color:var(--ink3)}
+.vtag{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;letter-spacing:.03em;padding:3px 9px;border-radius:20px;border:1px solid var(--line);color:var(--ink3)}
 .vtag.on{color:var(--ink2);border-color:var(--ink3)}
+.vtag .dotr{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.vtag .dotr.base{background:var(--base)}.vtag .dotr.fall{background:var(--fall)}
+.vtag .dotr.esc{background:var(--esc)}.vtag .dotr.proh{background:var(--proh)}
+.vtag .dotr.neutral{background:var(--ink3)}
 
 /* ---------- modal (clause detail) ---------- */
 .overlay{position:fixed;inset:0;background:rgba(22,20,15,.4);backdrop-filter:blur(3px);z-index:50;

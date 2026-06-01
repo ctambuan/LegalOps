@@ -8,8 +8,10 @@ import {
   createProposal, transitionProposal, logExport, seedClausesViaApi,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
-import { COMPANY_LABEL } from "../lib/config";
+import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
 import { exportMaster } from "../lib/exportDocx";
+import { callAssist } from "../lib/assist";
+import { uploadDocxToDrive } from "../lib/driveUpload";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
@@ -169,6 +171,23 @@ export default function Page() {
   );
 }
 
+// Standard drafting positions used when a clause does not define its own variants.
+const VARIANT_DEFAULTS = [
+  { key: "baseline", tier: "baseline", label: "Baseline", note: "Balanced position" },
+  { key: "buyside",  tier: "baseline", label: "Buy-Side", note: "Maximum protection" },
+  { key: "sellside", tier: "baseline", label: "Sell-Side", note: "Liability-controlled" },
+  { key: "fallback", tier: "fallback", label: "Acceptable Fallback", note: "Negotiated minimum" },
+];
+
+// A clause's drafting templates: its own labelled variants (e.g. Term's Model 1–4)
+// when defined, otherwise the standard positions that actually have recorded text.
+// Single source of truth so the library-card tags and the clause-detail tabs always match.
+function clauseTemplates(c) {
+  return (Array.isArray(c.variants) && c.variants.length)
+    ? c.variants.map((v) => ({ label: v.label, tier: v.tier || "baseline", note: v.note || "", text: v.text || "", whenToUse: v.whenToUse }))
+    : VARIANT_DEFAULTS.filter((t) => (c[t.key] || "").trim()).map((t) => ({ label: t.label, tier: t.tier, note: t.note, text: c[t.key] }));
+}
+
 /* ---------------- Library ---------------- */
 function Library({ clauses, onPropose, showToast, isReviewer }) {
   const [q, setQ] = useState("");
@@ -227,11 +246,15 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
             <div className="ctitle">{c.title}</div>
             <div className="cpurpose">{c.purpose || "—"}</div>
             <div className="cvariants">
-              <span className={"vtag " + (c.baseline ? "on" : "")}>Baseline</span>
-              <span className={"vtag " + (c.buyside ? "on" : "")}>Buy-Side</span>
-              <span className={"vtag " + (c.sellside ? "on" : "")}>Sell-Side</span>
-              <span className={"vtag " + (c.fallback ? "on" : "")}>Fallback</span>
-              <span className={"vtag " + (c.redflags ? "on" : "")}>Red Flags</span>
+              {clauseTemplates(c).map((t, i) => (
+                <span key={i} className="vtag on" title={t.label}>
+                  {/* Card shows the short label (e.g. "Model 1"); the modal tab keeps the full label. */}
+                  <span className={"dotr " + (TIERS[t.tier] ? TIERS[t.tier].c : "neutral")}></span>{t.label.split("—")[0].trim()}
+                </span>
+              ))}
+              {(c.redflags || "").trim() && (
+                <span className="vtag on"><span className="dotr proh"></span>Red Flags</span>
+              )}
             </div>
           </div>
         ))}
@@ -244,18 +267,27 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
 
 function ClauseModal({ c, onClose, onPropose, showToast }) {
   const copy = (t, label) => { navigator.clipboard?.writeText(t); showToast(`${label} copied`); };
-  const DEFAULTS = [
-    { key: "baseline", tier: "baseline", label: "Baseline", note: "Balanced position" },
-    { key: "buyside",  tier: "baseline", label: "Buy-Side", note: "Maximum protection" },
-    { key: "sellside", tier: "baseline", label: "Sell-Side", note: "Liability-controlled" },
-    { key: "fallback", tier: "fallback", label: "Acceptable Fallback", note: "Negotiated minimum" },
-  ];
-  // Clauses may define their own labelled variants (e.g. Term's Model 1–4); otherwise use the four defaults.
-  const templates = (Array.isArray(c.variants) && c.variants.length)
-    ? c.variants.map((v) => ({ label: v.label, tier: v.tier || "baseline", note: v.note || "", text: v.text || "" }))
-    : DEFAULTS.filter((t) => (c[t.key] || "").trim()).map((t) => ({ label: t.label, tier: t.tier, note: t.note, text: c[t.key] }));
+  // Same source as the library-card tags, so tabs and tags always match.
+  const templates = clauseTemplates(c);
   const [active, setActive] = useState(0);
   const cur = templates[active] || templates[0];
+  // AI assist (Claude): explain this clause, or review a counterparty's version.
+  const [aiBusy, setAiBusy] = useState("");        // "" | "explain" | "review"
+  const [aiOut, setAiOut] = useState("");
+  const [aiErr, setAiErr] = useState("");
+  const [showReview, setShowReview] = useState(false);
+  const [cpText, setCpText] = useState("");
+  const runAssist = async (mode) => {
+    setAiBusy(mode); setAiErr(""); setAiOut("");
+    try {
+      setAiOut(await callAssist(mode, {
+        clauseTitle: c.title, category: c.cat,
+        clauseText: cur?.text || c.baseline || "",
+        counterpartyText: mode === "review" ? cpText : undefined,
+      }));
+    } catch (e) { setAiErr(e.message || String(e)); }
+    setAiBusy("");
+  };
   const redflags = (c.redflags || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const usage = (c.usageNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const counsel = (c.counselNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
@@ -313,6 +345,35 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
               <ul>{usage.map((u, i) => <li key={i}>{u}</li>)}</ul>
             </div>
           )}
+
+          {AI_ASSIST_ENABLED && (
+            <>
+              <div className="sectlabel"><span className="t">Ask Claude</span><span className="h">— AI working drafts, not a Legal Department position</span></div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                <button className="btn sm ghost" disabled={!!aiBusy} onClick={() => runAssist("explain")}>
+                  {aiBusy === "explain" ? "Thinking…" : "Explain this clause"}</button>
+                <button className="btn sm ghost" disabled={!!aiBusy} onClick={() => setShowReview((v) => !v)}>
+                  Review a counterparty version</button>
+              </div>
+              {showReview && (
+                <div className="field" style={{ marginBottom: "10px" }}>
+                  <textarea value={cpText} onChange={(e) => setCpText(e.target.value)}
+                    placeholder="Paste the counterparty's proposed clause here, then Run review…" style={{ minHeight: "90px" }} />
+                  <div style={{ textAlign: "right", marginTop: "6px" }}>
+                    <button className="btn sm primary" disabled={!!aiBusy || !cpText.trim()} onClick={() => runAssist("review")}>
+                      {aiBusy === "review" ? "Reviewing…" : "Run review"}</button>
+                  </div>
+                </div>
+              )}
+              {aiErr && <div className="hint" style={{ color: "var(--oxblood)" }}>{aiErr}</div>}
+              {aiOut && (
+                <div className="note usage">
+                  <div className="nlab">Claude — working draft, verify before relying</div>
+                  <div className="vtext" style={{ whiteSpace: "pre-wrap" }}>{aiOut}</div>
+                </div>
+              )}
+            </>
+          )}
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Close</button>
@@ -335,7 +396,36 @@ function Contribute({ prefill, clearPrefill, user, onSubmit }) {
   const [rationale, setRationale] = useState("");
   const [redflag, setRedflag] = useState("");
   const [jurisdiction, setJurisdiction] = useState("Group-wide");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState("");
   useEffect(() => () => clearPrefill?.(), []); // eslint-disable-line
+
+  // Draft/improve the operative text with Claude, then split off any "Notes for Counsel"
+  // guidance into the rationale field (operative text and guidance stay separate).
+  const aiDraft = async () => {
+    setAiBusy(true); setAiErr("");
+    try {
+      const mode = type === "new" ? "draft" : "improve";
+      const out = await callAssist(mode, {
+        instruction: rationale || (type === "new"
+          ? `Draft a clause titled "${title || "(untitled)"}".`
+          : "Improve clarity, balance and enforceability while preserving intent."),
+        clauseTitle: title || baseRef,
+        clauseText: text,
+        tier: TIERS[tier]?.l,
+        category: prefill?.cat,
+      });
+      const m = out.match(/notes for counsel/i);
+      if (m) {
+        setText(out.slice(0, m.index).replace(/[#*\s]+$/, "").trim());
+        const notes = out.slice(m.index).replace(/^[#*\s]*notes for counsel[:\s-]*/i, "").trim();
+        setRationale((r) => r ? r : notes);
+      } else {
+        setText(out.trim());
+      }
+    } catch (e) { setAiErr(e.message || String(e)); }
+    setAiBusy(false);
+  };
 
   const mandatory = classification === "Mandatory Law";
   const valid = title.trim() && text.trim() && rationale.trim();
@@ -367,9 +457,18 @@ function Contribute({ prefill, clearPrefill, user, onSubmit }) {
             <select value={classification} onChange={(e) => setClassification(e.target.value)}>{CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
         </div>
         {mandatory && <div className="flagbox"><b>Mandatory Law — cited source note required</b>You must reproduce the exact statutory/regulatory citation verbatim in the rationale. Do not paraphrase or approximate. If you cannot cite a verified source, do not classify as Mandatory Law — use Internal Policy or Preferred Posture and flag for verification.</div>}
-        <div className="field"><label>{type === "improve" ? "Proposed revised clause text" : type === "fallback" ? "Proposed fallback clause text" : type === "expand" ? "Proposed conditional expansion" : "Proposed new clause text"}</label>
+        <div className="field">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+            <label style={{ margin: 0 }}>{type === "improve" ? "Proposed revised clause text" : type === "fallback" ? "Proposed fallback clause text" : type === "expand" ? "Proposed conditional expansion" : "Proposed new clause text"}</label>
+            {AI_ASSIST_ENABLED && <button type="button" className="btn sm ghost" disabled={aiBusy} onClick={aiDraft}
+              title="Draft or improve the operative text with Claude — a working draft for your review">
+              {aiBusy ? "Drafting…" : "✨ Draft with Claude"}</button>}
+          </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Operative text in house style — narrative prose, logical numbering, no bullet points…" />
-          <div className="hint">House style: formal, no contractions, active voice, hierarchical numbering, no bullets in operative text.</div></div>
+          <div className="hint">House style: formal, no contractions, active voice, hierarchical numbering, no bullets in operative text.</div>
+          {aiErr && <div className="hint" style={{ color: "var(--oxblood)" }}>{aiErr}</div>}
+          {AI_ASSIST_ENABLED && <div className="hint">AI output is a working draft for your review — not a Legal Department position. Verify before submitting.</div>}
+        </div>
         <div className="field"><label>Rationale / risk note{mandatory ? " (include verbatim citation)" : ""}</label>
           <textarea value={rationale} onChange={(e) => setRationale(e.target.value)} style={{ minHeight: "80px" }} placeholder="Why this position; commercial objective; any deviation from Playbook; novel issue; cross-jurisdictional flag…" /></div>
         <div className="field"><label>Associated red flag (optional)</label>
@@ -460,22 +559,49 @@ function ReviewCard({ p, open, toggle, act }) {
 
 /* ---------------- Master & Export ---------------- */
 function Master({ adopted, isReviewer, user, showToast }) {
+  const { getDriveAccessToken } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
   const run = async () => {
     setBusy(true);
     try { await exportMaster(adopted); await logExport(user, adopted.length); showToast("Master .docx generated — place in Drive folder"); }
     catch (e) { console.error(e); showToast("Export failed — see console"); }
     setBusy(false);
   };
+  // Save the master straight into the Drive folder under the reviewer's identity (drive.file).
+  const saveToDrive = async () => {
+    setDriveBusy(true);
+    try {
+      const { blob, filename } = await exportMaster(adopted, { download: false });
+      let token = await getDriveAccessToken();
+      let file;
+      try {
+        file = await uploadDocxToDrive(blob, filename, token, DRIVE_FOLDER_ID);
+      } catch (e) {
+        if (e.status === 401) { // token expired — refresh once and retry
+          token = await getDriveAccessToken({ forceRefresh: true });
+          file = await uploadDocxToDrive(blob, filename, token, DRIVE_FOLDER_ID);
+        } else { throw e; }
+      }
+      await logExport(user, adopted.length);
+      showToast(`Saved to Drive: ${file.name}`);
+    } catch (e) { console.error(e); showToast(e.message || "Drive save failed — see console"); }
+    setDriveBusy(false);
+  };
   return (
     <>
       <div className="lockmsg">This is the <b>adopted master</b> — the live record of positions the Head of Legal has
-        approved as addenda to Playbook v3.0. Export the full master as a formatted .docx and place it into the Drive
-        folder. Each export is logged in the audit trail.</div>
+        approved as addenda to Playbook {PLAYBOOK_VERSION}. Export the full master as a formatted .docx{DRIVE_UPLOAD_ENABLED ? " — or save it straight into the Drive folder" : " and place it into the Drive folder"}.
+        Each export is logged in the audit trail.</div>
       <div className="statbar">
         <div className="stat"><div className="n">{adopted.length}</div><div className="l">Adopted positions</div></div>
         <div className="stat"><div className="n">{new Set(adopted.map((m) => m.title)).size}</div><div className="l">Distinct clauses</div></div>
-        <div style={{ marginLeft: "auto" }}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: "10px" }}>
+          {DRIVE_UPLOAD_ENABLED && (
+            <button className="btn" onClick={saveToDrive} disabled={!adopted.length || driveBusy || busy}
+              title="Upload the master .docx into the Legal Operations Workbench Drive folder">
+              {driveBusy ? "Saving…" : "Save to Drive ↑"}</button>
+          )}
           <button className="btn primary" onClick={run} disabled={!adopted.length || busy}>{busy ? "Generating…" : "Export Master .docx ↓"}</button>
         </div>
       </div>

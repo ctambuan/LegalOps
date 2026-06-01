@@ -21,6 +21,19 @@ reference seeded from this master; this `.docx` is the authority.
   (newest dated file = current). v3.1 is uploaded there as of 2026-06-01.
 - Every calibration is recorded in the PRD change log (Section 12), mirroring PRD discipline.
 
+## Releasing a new version to the app (e.g. v3.1 → v3.2)
+The `.docx` ↔ app sync is **manual by design** (the anti-drift step). When the master is bumped,
+these must move together in the same commit, or the app will serve stale or mislabelled text:
+1. **Regenerate `data/clauses.seed.json`** from the new `.docx` so the seeded clause text matches
+   the master. ("Re-sync from master" in the app reloads from this JSON, not from Drive.)
+2. **Bump the version tag** — set `NEXT_PUBLIC_PLAYBOOK_VERSION_TAG` (short, e.g. `v3.2`) and
+   `NEXT_PUBLIC_PLAYBOOK_VERSION` (display, e.g. `v3.2 (DD Mon 2026)`) in the deploy env, or update
+   the defaults in `lib/config.js`. The tag is what gets stamped onto re-synced clauses and adopted
+   addenda in Firestore.
+3. **Update the "Current file" line above** and retain the prior `.docx` for audit.
+4. **Deliver the new `.docx`** to the Head of Legal for upload to the Drive folder (newest dated
+   file = current), and record the calibration in the PRD change log (Section 12).
+
 ## Why it lives here
 Kept under version control so revisions are precise, reversible, and auditable, and so the exact
 formatting is preserved across edits. This repository is private.
