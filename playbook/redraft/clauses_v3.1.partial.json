@@ -492,5 +492,45 @@
   "sellside": "Company Policy Amendments. The Company may amend its acceptable-use policy, security requirements and platform policies on [thirty (30)] days' notice. Amendments to negotiated core terms (pricing, liability, IP, data, termination) require mutual written agreement.",
   "fallback": "",
   "counselNotes": "Operational change orders are acceptable provided they are signed by authorised representatives and do not affect legal, regulatory, security, liability or pricing terms."
+ },
+ "61": {
+  "title": "Waiver",
+  "baseline": "Waiver. No failure or delay by either Party in exercising any right, power or remedy under this Agreement shall operate as a waiver of it, and no single or partial exercise of any right, power or remedy precludes any other or further exercise of that or any other right. A waiver of any breach does not waive any subsequent breach. A waiver is effective only if made in writing and signed by an authorised representative of the waiving Party, and applies only to the specific circumstances and instance expressly stated.",
+  "buyside": "",
+  "sellside": "",
+  "fallback": "",
+  "counselNotes": "Remedies are cumulative; ensure a waiver cannot be implied from course of dealing, forbearance, delay, acceptance of payment or partial enforcement. The Company's acceptance of payment, continued provision of the Services or forbearance from enforcement does not waive any right."
+ },
+ "62": {
+  "title": "Severability",
+  "baseline": "Severability. If any provision of this Agreement is found to be invalid, illegal or unenforceable by any court or tribunal of competent jurisdiction, that provision shall be (a) modified to the minimum extent necessary to make it valid, legal and enforceable; or (b) deleted if modification is not possible, and the remainder of this Agreement shall continue in full force and effect. The Parties shall use reasonable efforts to agree a replacement provision that achieves, as closely as possible, the original commercial intent and effect of the deleted provision.",
+  "buyside": "",
+  "sellside": "",
+  "fallback": "",
+  "counselNotes": "Where available under applicable law, include a \"blue pencil\" qualifier allowing a court to modify rather than delete a non-compliant provision (particularly for restraint-of-trade and non-compete clauses)."
+ },
+ "63": {
+  "title": "Further Assurance",
+  "baseline": "Further Assurance. Each Party shall promptly execute and deliver all documents, and take all actions, reasonably necessary or desirable to give full effect to this Agreement and the transactions contemplated by it.",
+  "buyside": "Enhanced Further Assurance. For IP assignments, regulatory filings, data migrations, security transitions and asset transfers, the Counterparty shall complete the required acts within the timeline specified by the Company, and the Company may execute documents on the Counterparty's behalf as its attorney-in-fact if the Counterparty fails to act within [ten (10)] Business Days of request.",
+  "sellside": "Company Further Assurance (Limited). The Company's further-assurance obligations are limited to acts within its reasonable control and shall not require it to incur material costs, make regulatory filings on the Counterparty's behalf, or take any action inconsistent with its regulatory or legal obligations.",
+  "fallback": "",
+  "counselNotes": "For low-risk contracts, a standard further-assurance obligation bounded by reasonable acts within each Party's control is acceptable."
+ },
+ "64": {
+  "title": "Cumulative Remedies",
+  "baseline": "Cumulative Remedies. The rights and remedies under this Agreement are cumulative and are not exclusive of any other rights or remedies provided by law, in equity or otherwise, unless this Agreement expressly states that a specified remedy is the sole remedy for a specified breach.",
+  "buyside": "Company Remedies. The Company is not limited to its contractual remedies; all equitable, legal, statutory and contractual remedies are available for breach of this Agreement.",
+  "sellside": "Service Credits as Sole Remedy (Specified Failures). Service credits for the SLA availability failures specified in Schedule [●] (SLA) are the Company's sole financial remedy for those specific failures, provided that: (a) the failure does not constitute an excluded liability; and (b) the Company's termination, indemnity and injunctive-relief rights are preserved.",
+  "fallback": "",
+  "counselNotes": "Accept service credits as sole remedy only where (a) it applies only to specific, non-critical, narrowly defined SLA metrics; and (b) data breach, security incidents, regulatory breaches, wilful misconduct and loss of Customer Assets are carved out."
+ },
+ "65": {
+  "title": "Equitable Remedies and Injunctive Relief",
+  "baseline": "Equitable Remedies and Injunctive Relief. Each Party acknowledges that a breach or threatened breach of Clause [●] (Confidentiality), Clause [●] (Intellectual Property Ownership), Clause [●] (Data Protection), Clause [●] (Information Security), Clause [●] (Digital Assets and Customer Assets) or any restrictive covenant in this Agreement may cause immediate and irreparable harm for which monetary compensation would not be an adequate remedy. Each Party is entitled, in addition to all other rights and remedies, to seek emergency, interlocutory or permanent injunctive relief, specific performance or other equitable relief from any court of competent jurisdiction, without the requirement to post a bond or prove actual damage, and without prejudice to any other remedy.",
+  "buyside": "Company Equitable Protections. The Company may seek: (a) mandatory orders requiring the Counterparty to comply with its data-protection, security or asset-safeguarding obligations; (b) emergency asset-freezing or preservation orders in respect of Customer Assets; and (c) urgent court orders without prior notice where immediate harm is demonstrated.",
+  "sellside": "Cross-Jurisdiction Relief. The Company may seek injunctive relief in any jurisdiction where the Counterparty has assets or operations for breach of its IP, data, confidentiality or acceptable-use obligations.",
+  "fallback": "",
+  "counselNotes": "A standard equitable-remedies clause is acceptable; note that a court or tribunal may require a bond in some jurisdictions."
  }
 }
