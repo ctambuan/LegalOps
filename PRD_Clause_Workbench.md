@@ -87,6 +87,10 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 - FR5. Master addenda: approved items collected; list + detail; export to formatted .docx; write to
   Google Drive (the configured Drive folder); each export logged.
 - FR6. Audit trail: every state transition recorded (who, what, when) and immutable.
+- FR7. AI assist (optional; PRD OI6): authenticated users may invoke Claude to draft a new clause,
+  improve/fallback an existing clause, review a counterparty's clause for risks, or explain a clause.
+  Outputs are working drafts that pre-fill the proposal form (draft/improve) or display read-only
+  (review/explain); they carry no authority until reviewed and adopted. Server-side key; disablable.
 
 ## 6. Non-Functional Requirements
 
@@ -114,6 +118,11 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
   session**, so security rules confirm a reviewer. No service-account key, no CLI, no public path.
   Runs automatically for a reviewer when the library is empty.
 - Document export: client-side .docx generation (docx library); place into the Drive folder.
+- AI assist (Claude): a server route (`app/api/assist`, same Firebase-ID-token gate as `/api/seed`)
+  calls the Anthropic Claude API (`claude-opus-4-8`, adaptive thinking, prompt-cached house-style
+  system prompt) for four modes — draft, improve, review, explain. The `ANTHROPIC_API_KEY` is
+  server-only; outputs are AI working drafts subject to human review (PRD OI6). Disable by unsetting
+  the key or `NEXT_PUBLIC_AI_ASSIST=off`.
 - Records (PRD, change log, exports): **Google Drive** — the dedicated **"Legal Operations Workbench"** folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`).
 
 Rationale: Next.js on Vercel gives a fast, modern, maintainable SPA/SSR hybrid with first-class DX;
@@ -181,6 +190,15 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
   reloads from the derived seed JSON, by design, not live from Drive). Still open: preserving adopted-
   addenda linkage across a version bump (each addendum keeps the `playbookVersion` stamp it was adopted
   under, but there is no automated re-mapping of an addendum onto a re-numbered/redrafted clause).
+- OI6. **Privileged clause text sent to the Claude (Anthropic) API.** ACCEPTED (2026-06-01): the Head of
+  Legal has accepted that, when a user invokes the in-app AI assist (draft / improve / review / explain),
+  the relevant clause text is sent to Anthropic's Claude API over TLS to generate a **working draft**.
+  Controls: the `ANTHROPIC_API_KEY` is server-side only (never in the browser bundle); the assist route
+  requires a valid Firebase ID token for this project; no data is sent unless a user explicitly clicks an
+  AI action; outputs are labelled AI working drafts and carry no authority until a human reviews/adopts
+  them. Anthropic's API does not train on submitted data; confirm the organisation's data-retention
+  setting (zero-retention if required) and that this egress is acceptable alongside OI2/OI3. The feature
+  can be disabled entirely by unsetting `ANTHROPIC_API_KEY` or `NEXT_PUBLIC_AI_ASSIST=off`.
 
 ## 12. Change Log
 
@@ -206,6 +224,8 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-01 | v3.1 (record) | Drive records reorganised into a dedicated **"Legal Operations Workbench"** Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`), now the canonical Drive location (superseding the personal-named folder; records moved by the Head of Legal). File-naming convention adopted for Drive records: **"Legal Operations Workbench - PRD v[X].[Y] - [YYYY-MM-DD]"** (and analogous for other artefacts). Drive-location references in this PRD (Section 7, OI2) updated accordingly. | AI eng |
 
 | 2026-06-01 | v3.1 (engine) | Contracting Engine corrected to reflect the live v3.1 master. (a) **Version stamping fixed:** "Re-sync from master" was writing every clause to Firestore labelled `v3.0` (the seed JSON carries no version field and the writer defaulted to a literal "v3.0"), and adopted addenda were likewise stamped `v3.0`, despite the seed content being the v3.1 redraft. Introduced a single env-overridable `PLAYBOOK_VERSION_TAG` (now `v3.1`) used for both the clause re-sync stamp and the adopted-addenda stamp, and bumped the display `PLAYBOOK_VERSION` default to `v3.1 (01 Jun 2026)`. Confirmed the Drive folder's current master is `...v3.1_2026-06-01.docx`. (b) **Library-card tags now reflect each clause's own templates:** cards previously hardcoded five tags (Baseline/Buy-Side/Sell-Side/Fallback/Red Flags) lit on/off by flat fields, so clauses with bespoke models (CL-05 Term's Model 1–4) showed wrong/empty tags. A single `clauseTemplates()` helper now drives both the card tags and the clause-detail tabs from the same source (a clause's `variants` when defined, else the standard positions with text), so tags and tabs always match; CL-05 shows its model labels (shortened to "Model 1"…"Model 4" on the card, full label in the tab and on hover); tags carry tier-colour dots. (c) Manual `.docx → seed JSON` + version-tag release checklist documented in `/playbook/README.md`; OI5 updated to PARTIALLY ADDRESSED. Section 8 data model updated to record `variants[]`, usageNotes and counselNotes. Lint, build and type-check pass clean. No change to the anti-drift model: re-sync reloads the derived seed JSON (by design), not live from Drive. | AI eng |
+
+| 2026-06-01 | v3.1 (AI assist) | Added an optional Claude-powered assist to the Contracting Engine (PRD OI6, accepted by the Head of Legal). New server route `app/api/assist` (Node runtime, same Firebase-ID-token gate as `/api/seed`, `ANTHROPIC_API_KEY` server-side only) calls the Anthropic API (`claude-opus-4-8`, adaptive thinking, prompt-cached house-style system prompt) in four modes — **draft** a new clause, **improve/fallback** an existing one, **review** a counterparty's clause for risks (severity-tagged), and **explain** a clause. UI: a "✨ Draft with Claude" action on the Contribute form (operative text → text field; any "Notes for Counsel" → rationale), and an "Ask Claude" panel in the clause detail (Explain / Review a counterparty version). All outputs are labelled AI working drafts with no authority until human review/adoption; nothing is sent externally unless a user clicks an AI action. Shared Firebase-token verifier extracted to `lib/verifyIdToken.js` (used by both `/api/seed` and `/api/assist`). Feature is disablable via `NEXT_PUBLIC_AI_ASSIST=off` or by unsetting the key. Added `@anthropic-ai/sdk`. Lint/build/type-check clean. New open item OI6 logged for the privileged-text egress. | AI eng (accepted by Head of Legal) |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*

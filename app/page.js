@@ -8,8 +8,9 @@ import {
   createProposal, transitionProposal, logExport, seedClausesViaApi,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
-import { COMPANY_LABEL } from "../lib/config";
+import { COMPANY_LABEL, AI_ASSIST_ENABLED } from "../lib/config";
 import { exportMaster } from "../lib/exportDocx";
+import { callAssist } from "../lib/assist";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
@@ -269,6 +270,23 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
   const templates = clauseTemplates(c);
   const [active, setActive] = useState(0);
   const cur = templates[active] || templates[0];
+  // AI assist (Claude): explain this clause, or review a counterparty's version.
+  const [aiBusy, setAiBusy] = useState("");        // "" | "explain" | "review"
+  const [aiOut, setAiOut] = useState("");
+  const [aiErr, setAiErr] = useState("");
+  const [showReview, setShowReview] = useState(false);
+  const [cpText, setCpText] = useState("");
+  const runAssist = async (mode) => {
+    setAiBusy(mode); setAiErr(""); setAiOut("");
+    try {
+      setAiOut(await callAssist(mode, {
+        clauseTitle: c.title, category: c.cat,
+        clauseText: cur?.text || c.baseline || "",
+        counterpartyText: mode === "review" ? cpText : undefined,
+      }));
+    } catch (e) { setAiErr(e.message || String(e)); }
+    setAiBusy("");
+  };
   const redflags = (c.redflags || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const usage = (c.usageNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const counsel = (c.counselNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
@@ -326,6 +344,35 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
               <ul>{usage.map((u, i) => <li key={i}>{u}</li>)}</ul>
             </div>
           )}
+
+          {AI_ASSIST_ENABLED && (
+            <>
+              <div className="sectlabel"><span className="t">Ask Claude</span><span className="h">— AI working drafts, not a Legal Department position</span></div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+                <button className="btn sm ghost" disabled={!!aiBusy} onClick={() => runAssist("explain")}>
+                  {aiBusy === "explain" ? "Thinking…" : "Explain this clause"}</button>
+                <button className="btn sm ghost" disabled={!!aiBusy} onClick={() => setShowReview((v) => !v)}>
+                  Review a counterparty version</button>
+              </div>
+              {showReview && (
+                <div className="field" style={{ marginBottom: "10px" }}>
+                  <textarea value={cpText} onChange={(e) => setCpText(e.target.value)}
+                    placeholder="Paste the counterparty's proposed clause here, then Run review…" style={{ minHeight: "90px" }} />
+                  <div style={{ textAlign: "right", marginTop: "6px" }}>
+                    <button className="btn sm primary" disabled={!!aiBusy || !cpText.trim()} onClick={() => runAssist("review")}>
+                      {aiBusy === "review" ? "Reviewing…" : "Run review"}</button>
+                  </div>
+                </div>
+              )}
+              {aiErr && <div className="hint" style={{ color: "var(--oxblood)" }}>{aiErr}</div>}
+              {aiOut && (
+                <div className="note usage">
+                  <div className="nlab">Claude — working draft, verify before relying</div>
+                  <div className="vtext" style={{ whiteSpace: "pre-wrap" }}>{aiOut}</div>
+                </div>
+              )}
+            </>
+          )}
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Close</button>
@@ -348,7 +395,36 @@ function Contribute({ prefill, clearPrefill, user, onSubmit }) {
   const [rationale, setRationale] = useState("");
   const [redflag, setRedflag] = useState("");
   const [jurisdiction, setJurisdiction] = useState("Group-wide");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiErr, setAiErr] = useState("");
   useEffect(() => () => clearPrefill?.(), []); // eslint-disable-line
+
+  // Draft/improve the operative text with Claude, then split off any "Notes for Counsel"
+  // guidance into the rationale field (operative text and guidance stay separate).
+  const aiDraft = async () => {
+    setAiBusy(true); setAiErr("");
+    try {
+      const mode = type === "new" ? "draft" : "improve";
+      const out = await callAssist(mode, {
+        instruction: rationale || (type === "new"
+          ? `Draft a clause titled "${title || "(untitled)"}".`
+          : "Improve clarity, balance and enforceability while preserving intent."),
+        clauseTitle: title || baseRef,
+        clauseText: text,
+        tier: TIERS[tier]?.l,
+        category: prefill?.cat,
+      });
+      const m = out.match(/notes for counsel/i);
+      if (m) {
+        setText(out.slice(0, m.index).replace(/[#*\s]+$/, "").trim());
+        const notes = out.slice(m.index).replace(/^[#*\s]*notes for counsel[:\s-]*/i, "").trim();
+        setRationale((r) => r ? r : notes);
+      } else {
+        setText(out.trim());
+      }
+    } catch (e) { setAiErr(e.message || String(e)); }
+    setAiBusy(false);
+  };
 
   const mandatory = classification === "Mandatory Law";
   const valid = title.trim() && text.trim() && rationale.trim();
@@ -380,9 +456,18 @@ function Contribute({ prefill, clearPrefill, user, onSubmit }) {
             <select value={classification} onChange={(e) => setClassification(e.target.value)}>{CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
         </div>
         {mandatory && <div className="flagbox"><b>Mandatory Law — cited source note required</b>You must reproduce the exact statutory/regulatory citation verbatim in the rationale. Do not paraphrase or approximate. If you cannot cite a verified source, do not classify as Mandatory Law — use Internal Policy or Preferred Posture and flag for verification.</div>}
-        <div className="field"><label>{type === "improve" ? "Proposed revised clause text" : type === "fallback" ? "Proposed fallback clause text" : type === "expand" ? "Proposed conditional expansion" : "Proposed new clause text"}</label>
+        <div className="field">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" }}>
+            <label style={{ margin: 0 }}>{type === "improve" ? "Proposed revised clause text" : type === "fallback" ? "Proposed fallback clause text" : type === "expand" ? "Proposed conditional expansion" : "Proposed new clause text"}</label>
+            {AI_ASSIST_ENABLED && <button type="button" className="btn sm ghost" disabled={aiBusy} onClick={aiDraft}
+              title="Draft or improve the operative text with Claude — a working draft for your review">
+              {aiBusy ? "Drafting…" : "✨ Draft with Claude"}</button>}
+          </div>
           <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Operative text in house style — narrative prose, logical numbering, no bullet points…" />
-          <div className="hint">House style: formal, no contractions, active voice, hierarchical numbering, no bullets in operative text.</div></div>
+          <div className="hint">House style: formal, no contractions, active voice, hierarchical numbering, no bullets in operative text.</div>
+          {aiErr && <div className="hint" style={{ color: "var(--oxblood)" }}>{aiErr}</div>}
+          {AI_ASSIST_ENABLED && <div className="hint">AI output is a working draft for your review — not a Legal Department position. Verify before submitting.</div>}
+        </div>
         <div className="field"><label>Rationale / risk note{mandatory ? " (include verbatim citation)" : ""}</label>
           <textarea value={rationale} onChange={(e) => setRationale(e.target.value)} style={{ minHeight: "80px" }} placeholder="Why this position; commercial objective; any deviation from Playbook; novel issue; cross-jurisdictional flag…" /></div>
         <div className="field"><label>Associated red flag (optional)</label>

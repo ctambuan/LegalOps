@@ -12,6 +12,7 @@
     "setclaims": "node scripts/setReviewer.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "docx": "8.5.0",
     "file-saver": "2.0.5",
     "firebase": "10.12.4",
