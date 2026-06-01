@@ -532,5 +532,45 @@
   "sellside": "Cross-Jurisdiction Relief. The Company may seek injunctive relief in any jurisdiction where the Counterparty has assets or operations for breach of its IP, data, confidentiality or acceptable-use obligations.",
   "fallback": "",
   "counselNotes": "A standard equitable-remedies clause is acceptable; note that a court or tribunal may require a bond in some jurisdictions."
+ },
+ "66": {
+  "title": "Survival",
+  "baseline": "Survival. The following provisions survive termination or expiry of this Agreement and continue in full force and effect: Clause [●] (Confidentiality); Clause [●] (Data Protection); Clause [●] (Intellectual Property Ownership); the licence restrictions; accrued payment obligations; Clause [●] (Audit and Records); Clause [●] (Indemnities); Clause [●] (Limitation of Liability); Clause [●] (Dispute Resolution); Clause [●] (Governing Law); the data-return and deletion obligations in Clause [●] (Consequences of Termination); the obligation to return Customer Assets; post-termination regulatory-cooperation obligations; and Clause [●] (Equitable Remedies). Any other provision that by its nature is intended to survive termination shall also survive.",
+  "buyside": "",
+  "sellside": "",
+  "fallback": "",
+  "counselNotes": "Ensure survival of all obligations that protect the Company from post-termination harm: confidentiality (indefinitely for trade secrets), data return/deletion (until completed), audit rights (for records the Counterparty retains), regulatory cooperation, IP assignment and equitable remedies. Where the Company is the supplier, ensure its disclaimers, liability limitations, acceptable-use restrictions and IP protections also survive. General survival language is acceptable only if the critical clauses are also named expressly."
+ },
+ "67": {
+  "title": "Third-Party Rights",
+  "baseline": "Third-Party Rights. Except for Company Affiliates and persons expressly identified as Indemnified Persons in Clause [●] (Indemnities), no person who is not a Party to this Agreement has any right to enforce any provision of it under any applicable law or contract principle. This Clause does not affect any right of a third party that exists, or is available, otherwise than under this Agreement.",
+  "buyside": "Company Beneficiaries. Company Affiliates and their directors, officers, employees and agents may enforce the indemnity and confidentiality obligations in this Agreement as intended third-party beneficiaries, where applicable law permits.",
+  "sellside": "No Enforcement Against the Company. No third party (including the Counterparty's customers, end users, affiliates or sub-customers) has any right to enforce any provision of this Agreement against the Company.",
+  "fallback": "",
+  "counselNotes": "A standard no-third-party-rights clause suits ordinary contracts; any third-party beneficiary rights require specific approval."
+ },
+ "68": {
+  "title": "Counterparts and Electronic Signatures",
+  "baseline": "Counterparts and Electronic Signatures. This Agreement may be executed in one or more counterparts, each of which constitutes an original and all of which together constitute one agreement. This Agreement may be executed and delivered by electronic signature, which shall have the same legal effect as an original signature to the fullest extent permitted by Applicable Law.",
+  "buyside": "Execution Requirements (Material Contracts). For material contracts, execution shall be: (a) through an approved electronic-signature platform (for example, DocuSign or Adobe Sign); (b) subject to identity verification appropriate to the contract value; and (c) supported by an audit trail and record of execution preserved by the platform.",
+  "sellside": "Execution Methods (Company as Supplier). For customer-facing or platform contracts, the Company may accept (a) click-to-accept execution; or (b) electronic signature, provided the method is legally valid in the relevant jurisdiction and the contract value and risk profile support it.",
+  "fallback": "Wet-Ink and Scanned Signatures (Lower-Risk). Scanned or photographed wet-ink signatures are acceptable for lower-risk contracts; an approved electronic-signature platform is required for contracts above [USD X] or involving regulated services, data, IP or Customer Assets.",
+  "counselNotes": ""
+ },
+ "69": {
+  "title": "Language",
+  "baseline": "Language. This Agreement is executed in the English language. If this Agreement is also executed in Bahasa Indonesia or any other language, the English-language version shall prevail in the event of any inconsistency, subject to any Applicable Law requiring a different prevailing language.",
+  "buyside": "",
+  "sellside": "Opportunity for Advice (Company as Supplier). This Agreement is in English, and the Counterparty confirms that it has had the opportunity to seek independent legal advice on its content in the language of its choice.",
+  "fallback": "",
+  "counselNotes": "For contracts governed by or performed in Indonesia: (a) consult Indonesian counsel on Law No. 24/2009 (the Indonesian-language requirement); (b) prepare a bilingual (English / Bahasa Indonesia) version where required or advisable; and (c) specify the prevailing language carefully, taking enforcement risk in Indonesian courts into account. Accept translation after signing only with counsel approval confirming no execution risk and alignment of meaning across versions."
+ },
+ "70": {
+  "title": "Governing Law",
+  "baseline": "Governing Law. This Agreement, and all non-contractual obligations arising out of or in connection with it, shall be governed by and construed in accordance with the laws of [specified jurisdiction], excluding its conflict-of-law rules.",
+  "buyside": "",
+  "sellside": "",
+  "fallback": "",
+  "counselNotes": "Preferred governing-law hierarchy: (a) Singapore law for cross-border commercial contracts between non-Indonesian parties; (b) Indonesian law where mandatory by regulation or where the contract is primarily performed in Indonesia by Indonesian entities; (c) another jurisdiction only where legally required and approved by the Head of Legal. The Company prefers Singapore law for platform and technology-supply agreements, subject to mandatory-law overrides. Select governing law at the start of negotiations, not as a late-stage concession. Accept the counterparty's home-jurisdiction law only where (i) enforcement, mandatory-law, tax, regulatory and dispute risks have been assessed by Legal; and (ii) enforcement against the Company there is not materially disadvantageous."
  }
 }
