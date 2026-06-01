@@ -15,9 +15,10 @@ reference seeded from this master; this `.docx` is the authority.
   `word/document.xml` are changed; all other package parts (styles, numbering, headers/footers,
   theme, footnotes) are copied byte-for-byte. Validated round-trip; see commit history.
 - Each revision is saved as a new **dated, versioned** file (the prior version is retained for audit).
-- A copy of the current master is kept in the configured Google Drive folder for the Head of Legal;
-  because the Drive connector cannot edit Word files in place, each new version is delivered for
-  upload (newest dated file = current).
+- A copy of the current master is kept in the dedicated **"Legal Operations Workbench"** Google Drive
+  folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`) for the Head of Legal; because the Drive connector
+  cannot edit/upload Word files, each new version is delivered to the Head of Legal for upload there
+  (newest dated file = current). v3.1 is uploaded there as of 2026-06-01.
 - Every calibration is recorded in the PRD change log (Section 12), mirroring PRD discipline.
 
 ## Why it lives here
