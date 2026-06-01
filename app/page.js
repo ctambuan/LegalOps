@@ -483,7 +483,7 @@ function Master({ adopted, isReviewer, user, showToast }) {
   return (
     <>
       <div className="lockmsg">This is the <b>adopted master</b> — the live record of positions the Head of Legal has
-        approved as addenda to Playbook v3.0. Export the full master as a formatted .docx and place it into the Drive
+        approved as addenda to Playbook {PLAYBOOK_VERSION}. Export the full master as a formatted .docx and place it into the Drive
         folder. Each export is logged in the audit trail.</div>
       <div className="statbar">
         <div className="stat"><div className="n">{adopted.length}</div><div className="l">Adopted positions</div></div>

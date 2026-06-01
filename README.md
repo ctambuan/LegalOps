@@ -3,7 +3,7 @@
 **Confidential & Legally Privileged — internal use only.**
 
 A governed, multi-user proposal-and-adoption layer over the Legal Contract Review Playbook
-v3.0. The team retrieves clauses, proposes improvements / fallbacks / expansions / new clauses, and
+(currently v3.1). The team retrieves clauses, proposes improvements / fallbacks / expansions / new clauses, and
 the Head of Legal reviews, approves, and adopts them into a master record exportable to Word.
 
 This is a **proposal layer on top of** the Playbook, not a replacement — the Playbook remains the
@@ -36,7 +36,9 @@ npm run dev
 ```
 
 ## Status
-Pre-deployment. Build compiles, lints, and type-checks cleanly. Open compliance items (privileged
-data residency, Drive write authorisation) are listed in PRD §11 and must be resolved with the DPO /
-Head of Legal before go-live. AI-assisted outputs are working drafts and are not a Legal Department
+LIVE (deployed to Vercel; early team rollout). Playbook at v3.1 — all 74 clauses redrafted. Build
+compiles, lints, and type-checks cleanly. Data-residency and privileged-storage items (PRD OI2/OI3)
+are accepted by the Head of Legal; remaining open items are OI1 (in-app export-to-Drive scope), OI4
+(allowlist governance/offboarding), and OI5 (clause re-seed across a version bump — partially
+addressed). See PRD §11. AI-assisted outputs are working drafts and are not a Legal Department
 position until reviewed and adopted.

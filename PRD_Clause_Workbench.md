@@ -1,6 +1,6 @@
 # Product Requirements Document — Clause Library Workbench (Contracting Engine)
 
-**Status:** v0.6 — LIVE (deployed to production; in early team rollout)
+**Status:** LIVE (deployed to production; in early team rollout). App v0.6; Playbook v3.1 — all 74 clauses redrafted.
 **Live URL:** https://legal-ops-two.vercel.app/
 **Product positioning:** This PRD covers the **Contracting Engine**, the first live module of the
 broader **Legal Operations Workbench**. Three further modules are scaffolded as "To Be Developed":
@@ -21,7 +21,7 @@ Document Number Generator, Compliance Tracker, Budget Tracker.
 
 ## 1. Problem Statement
 
-The Playbook v3.0 is the authoritative, privileged source of [Company]'s contracting positions. Today,
+The Playbook (now v3.1) is the authoritative, privileged source of [Company]'s contracting positions. Today,
 collaborative improvement of that library is constrained: a Project-based AI workspace is siloed to a
 single user, and there is no governed, multi-user pathway for the legal team to propose clause
 improvements, additional fallbacks, conditional expansions, and net-new clauses, route them to the
@@ -31,7 +31,7 @@ drift from, or contamination of, the Playbook itself.
 ## 2. Goals & Non-Goals
 
 **Goals**
-- G1. Let authorised team members retrieve any Playbook v3.0 clause with its four-tier variants.
+- G1. Let authorised team members retrieve any Playbook clause (current master: v3.1) with its variants.
 - G2. Let team members submit four contribution types: improvement, additional fallback,
   conditional expansion, new clause — each carrying proposed tier and classification.
 - G3. Route every submission to a Head-of-Legal-only review queue with approve / request-changes /
@@ -44,7 +44,7 @@ drift from, or contamination of, the Playbook itself.
 
 **Non-Goals (v1)**
 - NG1. The Workbench does NOT overwrite or replace the Playbook. It is a proposal-and-adoption layer
-  on top of it. Adopted items are stamped as addenda to v3.0.
+  on top of it. Adopted items are stamped as addenda with the current Playbook version (now v3.1).
 - NG2. No automated legal advice. No auto-approval. Human (Head of Legal) adoption is mandatory.
 - NG3. No real-time co-editing of the same clause text (Google-Docs-style OT/CRDT) in v1.
 - NG4. No public access. No external counterparty access.
@@ -61,8 +61,8 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 
 ## 4. Source-of-Truth & Anti-Drift Principle (critical)
 
-- The clause library is seeded from Playbook v3.0 (74 clauses parsed: Baseline, Buy-Side, Sell-Side,
-  Fallback, Red Flags, Purpose).
+- The clause library is seeded from the master Playbook (now v3.1; 74 clauses: Baseline, Buy-Side,
+  Sell-Side, Fallback, Red Flags, Purpose, plus clause-specific Models where defined, e.g. CL-05 Term).
 - Seed data is treated as READ-ONLY reference. Contributions never mutate seed records; they create
   separate proposal records that reference a seed clause by id.
 - Adopted positions are stored as ADDENDA with explicit linkage to the Playbook clause and a version
@@ -131,8 +131,8 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 - `proposals/{id}` — type, jurisdiction, title, baseRef, tier, classification, text, rationale,
   redflag, originalText, status, authorEmail, authorName, createdAt, reviewedAt, reviewerEmail,
   reviewNote.
-- `adopted/{id}` — snapshot of approved proposal + adoptedAt, adoptedByEmail, playbookVersion,
-  addendumNumber.
+- `adopted/{id}` — snapshot of approved proposal + adoptedAt, adoptedByEmail, playbookVersion
+  (stamped from `PLAYBOOK_VERSION_TAG`). Addenda are numbered sequentially at export time, not stored.
 - `audit/{id}` — append-only: actorEmail, action, targetType, targetId, fromStatus, toStatus, at.
 - `allowlist/{email}` — role: 'contributor' | 'reviewer'. Drives access + claims.
 
