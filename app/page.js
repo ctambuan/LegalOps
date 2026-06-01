@@ -237,23 +237,28 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
         ))}
       </div>
       {list.length === 0 && <div className="empty"><div className="big">No clauses match.</div>Adjust your search or category filter.</div>}
-      {sel && <ClauseModal c={sel} onClose={() => setSel(null)} onPropose={onPropose} showToast={showToast} />}
+      {sel && <ClauseModal key={sel.id} c={sel} onClose={() => setSel(null)} onPropose={onPropose} showToast={showToast} />}
     </>
   );
 }
 
 function ClauseModal({ c, onClose, onPropose, showToast }) {
   const copy = (t, label) => { navigator.clipboard?.writeText(t); showToast(`${label} copied`); };
-  const TEMPLATES = [
+  const DEFAULTS = [
     { key: "baseline", tier: "baseline", label: "Baseline", note: "Balanced position" },
     { key: "buyside",  tier: "baseline", label: "Buy-Side", note: "Maximum protection" },
     { key: "sellside", tier: "baseline", label: "Sell-Side", note: "Liability-controlled" },
     { key: "fallback", tier: "fallback", label: "Acceptable Fallback", note: "Negotiated minimum" },
-  ].filter((t) => (c[t.key] || "").trim());
-  const [active, setActive] = useState(TEMPLATES[0]?.key || "baseline");
-  const cur = TEMPLATES.find((t) => t.key === active) || TEMPLATES[0];
+  ];
+  // Clauses may define their own labelled variants (e.g. Term's Model 1–4); otherwise use the four defaults.
+  const templates = (Array.isArray(c.variants) && c.variants.length)
+    ? c.variants.map((v) => ({ label: v.label, tier: v.tier || "baseline", note: v.note || "", text: v.text || "" }))
+    : DEFAULTS.filter((t) => (c[t.key] || "").trim()).map((t) => ({ label: t.label, tier: t.tier, note: t.note, text: c[t.key] }));
+  const [active, setActive] = useState(0);
+  const cur = templates[active] || templates[0];
   const redflags = (c.redflags || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const usage = (c.usageNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  const counsel = (c.counselNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -269,8 +274,8 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
           {cur ? (
             <>
               <div className="tabs2">
-                {TEMPLATES.map((t) => (
-                  <button key={t.key} className={"tab2 " + (active === t.key ? "active" : "")} onClick={() => setActive(t.key)}>
+                {templates.map((t, i) => (
+                  <button key={i} className={"tab2 " + (active === i ? "active" : "")} onClick={() => setActive(i)}>
                     <span className={"dotr " + TIERS[t.tier].c}></span>{t.label}
                   </button>
                 ))}
@@ -278,14 +283,23 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
               <div className="tpanel">
                 <div className="tpanelhead">
                   <span className={"tier " + TIERS[cur.tier].c}>{TIERS[cur.tier].l}</span>
-                  <span className="tname">{cur.note}</span>
-                  <button className="copyb" onClick={() => copy(c[cur.key], cur.label)}>⧉ Copy</button>
+                  {cur.note && <span className="tname">{cur.note}</span>}
+                  <button className="copyb" onClick={() => copy(cur.text, cur.label)}>⧉ Copy</button>
                 </div>
-                <div className="vtext">{c[cur.key]}</div>
+                <div className="vtext">{cur.text}</div>
               </div>
             </>
           ) : <div className="hint">No drafting template recorded for this clause.</div>}
 
+          {(counsel.length > 0 || redflags.length > 0 || usage.length > 0) && (
+            <div className="sectlabel"><span className="t">Notes for Counsel</span><span className="h">— guidance, not contract text</span></div>
+          )}
+          {counsel.length > 0 && (
+            <div className="note usage">
+              <div className="nlab">When to use / negotiation notes</div>
+              <ul>{counsel.map((u, i) => <li key={i}>{u}</li>)}</ul>
+            </div>
+          )}
           {redflags.length > 0 && (
             <div className="note red">
               <div className="nlab">⚠ Red flags — do not accept without documented approval</div>
@@ -301,7 +315,7 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Close</button>
-          {cur && <button className="btn" onClick={() => copy(c[cur.key], cur.label)}>Copy {cur.label}</button>}
+          {cur && <button className="btn" onClick={() => copy(cur.text, cur.label)}>Copy {cur.label}</button>}
           <button className="btn primary" onClick={() => { onPropose(c); }}>Propose Change →</button>
         </div>
       </div>
