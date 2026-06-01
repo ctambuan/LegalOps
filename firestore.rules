@@ -1,0 +1,64 @@
+rules_version = '2';
+// Firestore security rules — PRIVILEGED LEGAL DATA. Access enforced here, never trusted from client.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function email() { return request.auth.token.email.lower(); }
+    function isAllowlisted() {
+      return isSignedIn() && exists(/databases/$(database)/documents/allowlist/$(email()));
+    }
+    function isReviewer() {
+      // Reviewer = custom claim OR allowlist role == 'reviewer'
+      return isSignedIn() && (
+        request.auth.token.reviewer == true ||
+        (isAllowlisted() &&
+         get(/databases/$(database)/documents/allowlist/$(email())).data.role == 'reviewer')
+      );
+    }
+
+    // --- allowlist: managed by admin/console only; readable by the owning user to resolve own role ---
+    match /allowlist/{e} {
+      allow read: if isSignedIn() && e == email();
+      allow write: if false; // console / admin SDK only
+    }
+
+    // --- clauses (seed reference): read-only to allowlisted users; never client-writable ---
+    match /clauses/{id} {
+      allow read: if isAllowlisted();
+      allow write: if false; // seeded via admin SDK only
+    }
+
+    // --- proposals ---
+    match /proposals/{id} {
+      allow read: if isAllowlisted();
+      // create: allowlisted user submitting as themselves, status must start 'pending'
+      allow create: if isAllowlisted()
+        && request.resource.data.authorEmail == email()
+        && request.resource.data.status == 'pending';
+      // update: reviewer only, and the substantive fields must remain unchanged
+      // (reviewer may change status, reviewNote, reviewerEmail, reviewedAt only).
+      allow update: if isReviewer()
+        && request.resource.data.text == resource.data.text
+        && request.resource.data.authorEmail == resource.data.authorEmail
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.tier == resource.data.tier
+        && request.resource.data.classification == resource.data.classification;
+      allow delete: if false;
+    }
+
+    // --- adopted master: reviewer writes only; allowlisted read ---
+    match /adopted/{id} {
+      allow read: if isAllowlisted();
+      allow write: if isReviewer();
+    }
+
+    // --- audit: append-only, immutable ---
+    match /audit/{id} {
+      allow read: if isReviewer();
+      allow create: if isAllowlisted() && request.resource.data.actorEmail == email();
+      allow update, delete: if false;
+    }
+  }
+}
