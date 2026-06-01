@@ -147,13 +147,13 @@ Prereqs: Node 20+, a Firebase project, a Vercel account, gcloud/firebase CLIs.
   authenticates and writes to the configured project folder (this PRD and project records were written
   there). Still to confirm: whether the in-app master .docx export should write to the same Shared Drive
   folder via the same credential/scope, and the Shared-Drive vs normal-folder write-permission distinction.
-- OI2. **Privileged data into personal Drive + Firebase.** Confirm with DPO / Head of Special
-  Project that storing privileged legal data in (a) a personal/personal-named Google Drive folder and
-  (b) Firebase (with global Auth) is acceptable, or route to a corporate workspace. Note: the configured
-  folder ("04. Christine Personal File") sits inside a Shared Drive but is personally named — confirm
-  this is the intended home for privileged records. ROUTE TO HEAD OF LEGAL.
-- OI3. **Data residency vs Firebase Auth global service.** Firestore is Jakarta; Auth is global.
-  Verify acceptability.
+- OI2. **Privileged data into personal Drive + Firebase.** RESOLVED (2026-06-01): the Head of Legal
+  has reviewed and accepted storing privileged legal data in (a) the personal-named Google Drive folder
+  ("04. Christine Personal File", within the Shared Drive) and (b) Firebase. This is recorded as a
+  Head-of-Legal decision; no further DPO routing required for v1 on this point.
+- OI3. **Data residency vs Firebase Auth global service.** RESOLVED (2026-06-01): the Head of Legal has
+  accepted that Firestore data resides in Jakarta (asia-southeast2) while Firebase Authentication runs as
+  a global service. Acceptable for v1.
 - OI4. **Allowlist governance.** Who maintains the allowlist; offboarding process.
 - OI5. **Playbook update process.** When Playbook v3.1 issues, how is the seed re-synced without
   losing adopted addenda linkage.
@@ -166,6 +166,7 @@ Prereqs: Node 20+, a Firebase project, a Vercel account, gcloud/firebase CLIs.
 | 2026-06-01 | v0.2 | Codebase built and verified. (a) Next.js upgraded off 14.2.5 to 15.5.7 after the build surfaced a published Next.js security advisory; deploy-time instruction added to pin latest patched release against the live registry (sandbox registry could not give a clean final audit). (b) Firebase init refactored to lazy, browser-only `getFb()` after the production build caught a static-prerender crash (`auth/invalid-api-key`); `lib/auth.js` and `lib/data.js` updated to match. (c) Added a "Not configured" runtime state so a deploy missing env vars fails visibly, not silently. (d) Firestore rules hardened: reviewer updates to proposals now cannot alter substantive fields (text, author, title, tier, classification) — only review fields. (e) Production build, lint, and type-check all pass clean (4/4 pages). Open items OI1–OI5 unchanged and still require resolution before go-live. | AI eng (for the reviewer (owner)) |
 | 2026-06-01 | v0.3 | De-branded to a company-agnostic template. (a) All 521 `[Pluang]` party placeholders in the clause bank generalised to `[Company]`; 74 narrative references and a sample email genericised; 0 brand references remain in source. (b) Added `lib/config.js` with `COMPANY_LABEL` and `PLAYBOOK_VERSION` (env-overridable) so a single codebase serves any client; UI header, doc export header, and export filename now read from config. (c) Classification "Pluang Internal Policy" renamed to neutral "Internal Policy" across UI and export. (d) Repo/package renamed `clause-workbench`; PRD/README/DEPLOY de-branded; reviewer references generalised to "workspace owner". (e) Rebuilt — compiles, lints, type-checks clean. Drive write still non-functional (OI1) at the time. | AI eng |
 | 2026-06-01 | v0.3 (record) | Drive connector now functional: PRD and project records written to the configured project folder. OI1 updated to reflect resolution for record-keeping; in-app export-to-Drive scope confirmation still pending. Codebase committed to the `legalops` repository. | AI eng |
+| 2026-06-01 | v0.3 (decision) | Head of Legal sign-off: OI2 (privileged data in the personal-named Drive folder + Firebase) and OI3 (Firestore in Jakarta with global Firebase Auth) reviewed and ACCEPTED for v1. Open items remaining before go-live: OI1 (in-app export-to-Drive scope), OI4 (allowlist governance/offboarding), OI5 (Playbook re-seed process). | Head of Legal |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
