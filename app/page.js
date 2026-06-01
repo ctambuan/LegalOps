@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
   listenClauses, listenProposals, listenAdopted,
-  createProposal, transitionProposal, logExport,
+  createProposal, transitionProposal, logExport, seedClausesViaApi,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
 import { COMPANY_LABEL } from "../lib/config";
@@ -115,7 +115,7 @@ export default function Page() {
         </div>
 
         <div className="content">
-          {tab === "library" && <Library clauses={clauses} onPropose={(c) => { setPrefill(c); setTab("contribute"); }} showToast={showToast} />}
+          {tab === "library" && <Library clauses={clauses} onPropose={(c) => { setPrefill(c); setTab("contribute"); }} showToast={showToast} isReviewer={isReviewer} />}
           {tab === "contribute" && <Contribute prefill={prefill} clearPrefill={() => setPrefill(null)} user={user}
             onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
           {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
@@ -131,10 +131,17 @@ export default function Page() {
 }
 
 /* ---------------- Library ---------------- */
-function Library({ clauses, onPropose, showToast }) {
+function Library({ clauses, onPropose, showToast, isReviewer }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [sel, setSel] = useState(null);
+  const [seeding, setSeeding] = useState(false);
+  const loadClauses = async () => {
+    setSeeding(true);
+    try { const n = await seedClausesViaApi(); showToast(`Loaded ${n} Playbook clauses`); }
+    catch (e) { console.error(e); showToast(e.message || "Load failed — see console"); }
+    setSeeding(false);
+  };
   const cats = useMemo(() => ["All", ...Array.from(new Set(clauses.map((c) => c.cat)))], [clauses]);
   const list = useMemo(() => clauses.filter((c) => {
     const m = (c.title + " " + c.purpose + " " + c.baseline).toLowerCase().includes(q.toLowerCase());
@@ -143,6 +150,12 @@ function Library({ clauses, onPropose, showToast }) {
 
   return (
     <>
+      {clauses.length === 0 && isReviewer && (
+        <div className="lockmsg" style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "space-between", flexWrap: "wrap" }}>
+          <span>One-time setup: load the {PLAYBOOK_VERSION} Playbook clauses into the library. Only you (the Head of Legal) can do this, and the clause text is written securely on the server.</span>
+          <button className="btn primary" onClick={loadClauses} disabled={seeding}>{seeding ? "Loading…" : "Load Playbook clauses"}</button>
+        </div>
+      )}
       <div className="toolbar">
         <div className="search">
           <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>

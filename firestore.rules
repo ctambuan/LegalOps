@@ -27,7 +27,7 @@ service cloud.firestore {
     // --- clauses (seed reference): read-only to allowlisted users; never client-writable ---
     match /clauses/{id} {
       allow read: if isAllowlisted();
-      allow write: if false; // seeded via admin SDK only
+      allow write: if isReviewer(); // one-time load / re-seed via server-side /api/seed loader
     }
 
     // --- proposals ---

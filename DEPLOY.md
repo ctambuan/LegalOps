@@ -31,23 +31,24 @@ firebase use --add                     # select your project
 firebase deploy --only firestore       # deploys firestore.rules + indexes
 ```
 
-## 4. Service account (for seeding + reviewer claim)
-1. Firebase console → Project settings → Service accounts → Generate new private key.
-2. Save as `service-account.json` in the project root (it is gitignored — never commit it).
+## 4. First reviewer + allowlist (no service account required)
+Many Google Workspace orgs block service-account key creation. None is needed: the Firestore **console**
+writes with owner privileges and bypasses security rules, so the allowlist is bootstrapped by hand.
+1. Firestore Database → **Start collection** `allowlist`.
+2. Document ID = the reviewer's email (lowercase). Add field `role` (string) = `reviewer`. Save.
+3. Add each team member the same way with `role` = `contributor`.
 
-## 5. Seed the 74 Playbook clauses
-```bash
-GOOGLE_APPLICATION_CREDENTIALS=./service-account.json npm run seed
-```
+`isReviewer()` resolves from the allowlist `role`, so no custom-claim step is required. (The optional
+`scripts/seed.mjs` / `scripts/setReviewer.mjs` remain for environments that *do* allow a service account.)
 
-## 6. Allowlist + reviewer
-The reviewer (workspace owner) must sign in once first (so her user record exists), then:
-```bash
-GOOGLE_APPLICATION_CREDENTIALS=./service-account.json \
-  npm run setclaims -- owner@example.com reviewer teammate@example.com contributor
-```
-Re-run with additional `<email> <role>` pairs to add team members. Removing someone: delete their
-`allowlist/{email}` doc in the console (and unset the reviewer claim if applicable).
+## 5. Load the 74 Playbook clauses (one-time, in-app — no key, no CLI)
+The clauses are loaded by the signed-in reviewer through the server-side loader (`app/api/seed`). The
+privileged clause text lives only on the server and is never sent to the browser.
+1. Deploy the app (Section 7) and sign in as the reviewer (whose allowlist doc exists from Section 4).
+2. On the **Clause Library** tab, click **Load Playbook clauses**.
+
+Re-seeding (e.g. when Playbook v3.1 issues) uses the same button. This relies on the `clauses` rule
+`allow write: if isReviewer()`.
 
 ## 7. Deploy to Vercel
 1. Push the repo to GitHub.
