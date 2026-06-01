@@ -45,9 +45,9 @@ export default function Page() {
   if (!user) return (
     <div className="center">
       <div className="gate">
-        <div className="kicker">{COMPANY_LABEL} · Legal Department</div>
-        <h2>Clause Library Workbench</h2>
-        <p>Confidential &amp; legally privileged. Access is restricted to authorised {COMPANY_LABEL} accounts.</p>
+        <div className="kicker">Built for Legal Department</div>
+        <h2>Legal Operations Workbench</h2>
+        <p>Confidential &amp; Legally Privileged. Access is restricted to authorized accounts.</p>
         <button className="btn primary" onClick={login}>Sign in with Google</button>
       </div>
     </div>
