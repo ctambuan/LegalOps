@@ -1,6 +1,10 @@
-# Product Requirements Document — Clause Library Workbench
+# Product Requirements Document — Clause Library Workbench (Contracting Engine)
 
-**Status:** Draft v0.3 (pre-deployment; company-agnostic; codebase built & verified)
+**Status:** v0.6 — LIVE (deployed to production; in early team rollout)
+**Live URL:** https://legal-ops-two.vercel.app/
+**Product positioning:** This PRD covers the **Contracting Engine**, the first live module of the
+broader **Legal Operations Workbench**. Three further modules are scaffolded as "To Be Developed":
+Document Number Generator, Compliance Tracker, Budget Tracker.
 **Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not Legal Department position)
 **Classification:** Confidential & Legally Privileged — [Company] internal use only
@@ -95,13 +99,21 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 - NFR4. Auditability: append-only audit collection; exports logged.
 - NFR5. Accessibility: keyboard-navigable, sufficient contrast, semantic HTML.
 
-## 7. Architecture (selected)
+## 7. Architecture (selected; as deployed)
 
-- Frontend/Hosting: **Next.js (App Router) deployed on Vercel.**
-- Data: **Cloud Firestore (Jakarta, asia-southeast2).**
-- Auth: **Firebase Authentication (Google provider) + email allowlist in security rules** and custom
-  claims for reviewer role.
-- Document export: client-side .docx generation (docx library) + Drive write via connector / Drive API.
+- Product shell: **Legal Operations Workbench** — left-sidebar navigation across four modules
+  (Document Number Generator, Compliance Tracker, **Contracting Engine** [live], Budget Tracker).
+- Frontend/Hosting: **Next.js (App Router) deployed on Vercel** (production project; live URL above).
+- Data: **Cloud Firestore (Jakarta, asia-southeast2)**, Firebase project `legalops2026`.
+- Auth: **Firebase Authentication (Google provider)**. Access + reviewer role resolve from the
+  `allowlist/{email}` document's `role` field via Firestore security rules (a `reviewer:true` custom
+  claim is also honoured but is optional and not required in the live setup).
+- Clause loading (one-time / re-seed): the privileged clause text is served only to a verified
+  signed-in user by a server route (`app/api/seed`, which verifies the Firebase ID token against
+  Firebase's public keys); the **client then writes the clauses under the user's own Firestore
+  session**, so security rules confirm a reviewer. No service-account key, no CLI, no public path.
+  Runs automatically for a reviewer when the library is empty.
+- Document export: client-side .docx generation (docx library); place into the Drive folder.
 - Records (PRD, change log, exports): **Google Drive** (the configured Drive folder).
 
 Rationale: Next.js on Vercel gives a fast, modern, maintainable SPA/SSR hybrid with first-class DX;
@@ -129,17 +141,20 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 - `audit`: create-only; no update/delete by anyone (immutable).
 - `allowlist`: no client writes; managed via console / admin only.
 
-## 10. Deployment Runbook (summary; full in /DEPLOY.md)
+## 10. Deployment Runbook (summary; full in /DEPLOY.md) — as performed, key-free
 
-Prereqs: Node 20+, a Firebase project, a Vercel account, gcloud/firebase CLIs.
-1. Create Firebase project; enable Auth (Google) and Firestore (asia-southeast2).
-2. Add authorised emails to `allowlist` collection; set reviewer claim for the reviewer (owner).
-3. `npm i`; set env vars (Firebase web config) locally and in Vercel.
-4. Deploy Firestore rules + indexes: `firebase deploy --only firestore`.
-5. Seed clauses: `node scripts/seed.mjs` (uses service account).
-6. `vercel --prod` to deploy the app.
-7. Verify: sign in as a non-allowlisted account (must be denied), as contributor (no review tab), as
-   the reviewer (owner) (review + adopt + export).
+1. Firebase project (`legalops2026`): Firestore created in **asia-southeast2 (Jakarta)**; Google
+   sign-in enabled; Firestore security rules published (no composite indexes required).
+2. **No service-account key** (org policy blocks key creation). The first reviewer + allowlist are
+   created by hand in the Firestore console (console writes bypass rules with owner privileges):
+   document ID = email (lowercase), field `role` = `reviewer` / `contributor`.
+3. App deployed on **Vercel** with the six `NEXT_PUBLIC_FIREBASE_*` env vars (production = `main`).
+4. The Vercel domain (`legal-ops-two.vercel.app`) added to Firebase **Authentication → Authorized
+   domains** so Google sign-in works.
+5. Reviewer signs in; the 74 clauses load automatically (server-served text + client-side write under
+   the reviewer's session). Re-seed uses the same path.
+6. Verify (Section 11 test): non-allowlisted account denied; contributor has no Review tab and cannot
+   write `adopted`/transition; reviewer can review + adopt + export.
 
 ## 11. Open Items / Risks (must be resolved before go-live)
 
@@ -169,6 +184,13 @@ Prereqs: Node 20+, a Firebase project, a Vercel account, gcloud/firebase CLIs.
 | 2026-06-01 | v0.3 (decision) | Head of Legal sign-off: OI2 (privileged data in the personal-named Drive folder + Firebase) and OI3 (Firestore in Jakarta with global Firebase Auth) reviewed and ACCEPTED for v1. Open items remaining before go-live: OI1 (in-app export-to-Drive scope), OI4 (allowlist governance/offboarding), OI5 (Playbook re-seed process). | Head of Legal |
 | 2026-06-01 | v0.4 | UI redesign approved by Head of Legal and applied: calm editorial ("trusted counsel") aesthetic — warm paper palette, serif display + clean sans UI, hairline rules, soft tier pills, left-sidebar navigation with per-section headers. System fonts only (external Google Fonts dependency removed). No functional/logic changes. Reviewed as static mockups before implementation; lint/build/type-check pass. Drive PRD copy is intentionally NOT auto-updated (per Head of Legal: refresh Drive source-of-truth only on request). | AI eng (design approved by Head of Legal) |
 | 2026-06-01 | v0.5 | Deployment adapted to an org policy that blocks service-account key creation (no downloadable admin key available). (a) First reviewer + allowlist are bootstrapped by hand in the Firestore console (console writes bypass rules with owner privileges); reviewer role resolves from `allowlist.role`, so the custom-claim/setReviewer step is dropped. (b) Clause seeding moved to a server-side, reviewer-gated loader (`app/api/seed`) invoked by a one-time "Load Playbook clauses" button — no key, no CLI; the privileged clause text is served only server-side and never reaches the browser (no /public, no client bundle). (c) Firestore rule for `clauses` changed from `write: if false` to `write: if isReviewer()` to permit the one-time load and future re-seed (OI5). Anti-drift preserved: clause writes remain reviewer-only; contributors still cannot touch clauses. Live deployment to Firebase project `legalops2026` + Vercel in progress. | AI eng |
+| 2026-06-01 | v0.6 | LIVE. (a) Product repositioned as **Legal Operations Workbench** with four top-level modules; the clause tool became the **Contracting Engine** (live); Document Number Generator, Compliance Tracker, Budget Tracker added as "To Be Developed" pages. (b) Landing/sign-in copy set by Head of Legal: title "Legal Operations Workbench", eyebrow "Built for Legal Department", "Confidential & Legally Privileged. Access is restricted to authorized accounts." (c) Deployed to Vercel (`legal-ops-two.vercel.app`) against Firebase `legalops2026`; Google sign-in working after adding the Vercel domain to Authorized domains. (d) Clause-loading hardened through three fixes: the server→Firestore REST write was not recognised as the user (rules denied), so writes were moved to the client's Firestore session; the token check via Google `tokeninfo` rejected Firebase ID tokens, replaced by direct RS256 verification against Firebase's public x509 certs; the manual button was replaced by automatic loading on first empty library for a reviewer. 74 clauses loaded successfully and visible to all signed-in allowlisted users. | AI eng (live rollout with Head of Legal) |
+
+| 2026-06-01 | v0.7 | Master Playbook brought under control as the single source of truth. The genuine `Pluang Contracting Playbook v3.0` (.docx, fully formatted) is stored, version-controlled, in the repo at `/playbook/`. Head of Legal directed: on each adopted change, calibrate the **master directly** (revise the clause text, bump version), **never altering formatting** — edits are surgical to `word/document.xml` only, all other package parts copied byte-for-byte (round-trip validated). A copy is also kept in the Google Drive folder (uploaded by the Head of Legal, since the connector can't ingest/edit Word files in place); each new version is delivered for upload, newest dated file = current. The Firestore `clauses` collection is a derived read-only reference seeded from this master. Calibration process documented in `/playbook/README.md`. | AI eng (directed by Head of Legal) |
+
+Open items still outstanding at v0.7: OI4 (allowlist governance / offboarding owner), OI5 (Playbook
+re-seed of the derived `clauses` collection when the master version bumps). Recommended next: complete
+the access safety test; add team members; replace the `[Company]` label with the real organisation name.
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
