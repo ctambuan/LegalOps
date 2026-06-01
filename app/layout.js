@@ -3,7 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "../lib/auth";
 
 export const metadata = {
-  title: "Clause Library Workbench",
+  title: "Legal Operations Workbench",
   description: "Confidential & Legally Privileged — internal use only.",
   robots: "noindex, nofollow",
 };

@@ -19,6 +19,7 @@ export default function Page() {
   const [adopted, setAdopted] = useState([]);
   const [toast, setToast] = useState("");
   const [prefill, setPrefill] = useState(null);
+  const [feature, setFeature] = useState("contracting");
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(""), 2800); };
 
   useEffect(() => {
@@ -79,8 +80,16 @@ export default function Page() {
   };
   const pg = PAGE[tab] || PAGE.library;
 
-  const NavItem = (key, label, badge) => (
-    <button className={"navitem " + (tab === key ? "active" : "")} onClick={() => setTab(key)}>
+  const FEATURES = [
+    { key: "docgen", label: "Document Number Generator" },
+    { key: "compliance", label: "Compliance Tracker" },
+    { key: "contracting", label: "Contracting Engine" },
+    { key: "budget", label: "Budget Tracker" },
+  ];
+  const activeFeature = FEATURES.find((f) => f.key === feature) || FEATURES[2];
+
+  const SubItem = (key, label, badge) => (
+    <button className={"subitem " + (tab === key ? "active" : "")} onClick={() => setTab(key)}>
       <span className="dot"></span>{label}{badge ? <span className="badge">{badge}</span> : null}
     </button>
   );
@@ -89,14 +98,26 @@ export default function Page() {
     <div className="wrap">
       <aside className="side">
         <div className="brand">
-          <div className="wm">Clause Workbench</div>
-          <div className="eyebrow">{COMPANY_LABEL} · Legal</div>
+          <div className="wm">Legal Operations Workbench</div>
+          <div className="eyebrow">Built for Legal Department</div>
         </div>
         <nav className="nav">
-          {NavItem("library", "Clause Library")}
-          {NavItem("contribute", "Propose / Draft")}
-          {isReviewer && NavItem("review", "Review", pending)}
-          {NavItem("master", "Master & Export", adopted.length || 0)}
+          {FEATURES.map((f) => (
+            <div key={f.key} className="navgroup">
+              <button className={"navitem " + (feature === f.key ? "active" : "")} onClick={() => setFeature(f.key)}>
+                <span className="dot"></span>{f.label}
+                {f.key === "contracting" && pending ? <span className="badge">{pending}</span> : null}
+              </button>
+              {f.key === "contracting" && feature === "contracting" && (
+                <div className="subnav">
+                  {SubItem("library", "Clause Library")}
+                  {SubItem("contribute", "Propose / Draft")}
+                  {isReviewer && SubItem("review", "Review", pending)}
+                  {SubItem("master", "Master & Export", adopted.length || 0)}
+                </div>
+              )}
+            </div>
+          ))}
         </nav>
         <div className="who">
           <div>
@@ -108,19 +129,37 @@ export default function Page() {
       </aside>
 
       <div className="main">
-        <div className="topbar">
-          <div className="kicker">{pg.eyebrow}</div>
-          <h1>{pg.title}</h1>
-          <div className="sub">{pg.sub}</div>
-        </div>
-
-        <div className="content">
-          {tab === "library" && <Library clauses={clauses} onPropose={(c) => { setPrefill(c); setTab("contribute"); }} showToast={showToast} isReviewer={isReviewer} />}
-          {tab === "contribute" && <Contribute prefill={prefill} clearPrefill={() => setPrefill(null)} user={user}
-            onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
-          {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
-          {tab === "master" && <Master adopted={adopted} isReviewer={isReviewer} user={user} showToast={showToast} />}
-        </div>
+        {feature === "contracting" ? (
+          <>
+            <div className="topbar">
+              <div className="kicker">Contracting Engine · {pg.eyebrow}</div>
+              <h1>{pg.title}</h1>
+              <div className="sub">{pg.sub}</div>
+            </div>
+            <div className="content">
+              {tab === "library" && <Library clauses={clauses} onPropose={(c) => { setPrefill(c); setTab("contribute"); }} showToast={showToast} isReviewer={isReviewer} />}
+              {tab === "contribute" && <Contribute prefill={prefill} clearPrefill={() => setPrefill(null)} user={user}
+                onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
+              {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
+              {tab === "master" && <Master adopted={adopted} isReviewer={isReviewer} user={user} showToast={showToast} />}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="topbar">
+              <div className="kicker">Legal Operations · Module</div>
+              <h1>{activeFeature.label}</h1>
+              <div className="sub">Part of the Legal Operations Workbench roadmap.</div>
+            </div>
+            <div className="content">
+              <div className="tbd">
+                <div className="tbdtag">To Be Developed</div>
+                <div className="big">{activeFeature.label}</div>
+                <p>This module is planned and not yet built. The <b>Contracting Engine</b> is the capability live today — select it from the left to use the clause library, proposals, review and the adopted master.</p>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="priv">This workbench and its contents are the confidential and legally privileged property of {COMPANY_LABEL} and its group companies, for internal Legal Department use only. AI-assisted outputs remain working drafts subject to human review by qualified {COMPANY_LABEL} counsel and do not constitute legal advice or a Legal Department position until reviewed and adopted by the Head of Legal. Positions are classified per the Playbook four-tier scheme; only positions expressly marked Mandatory Law with a cited source note represent verified legal requirements — all citations require verification before reliance.</div>
       </div>
