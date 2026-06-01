@@ -134,6 +134,38 @@ select:focus{outline:none;border-color:var(--ink3)}
 .copyb:hover{border-color:var(--ink3)}
 .mfoot{padding:16px 30px;border-top:1px solid var(--line);background:var(--panel2);display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 
+/* purpose note in clause head */
+.purposenote{display:flex;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 13px;margin-top:6px}
+.purposenote .lab{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);white-space:nowrap;padding-top:2px}
+.purposenote .txt{font-size:12.5px;color:var(--ink2);line-height:1.5;font-style:italic}
+/* section divider label */
+.sectlabel{display:flex;align-items:baseline;gap:9px;margin:18px 0 12px}
+.sectlabel .t{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.sectlabel .h{font-size:11.5px;color:var(--ink3)}
+.sectlabel::after{content:"";flex:1;height:1px;background:var(--line)}
+/* template tabs */
+.tabs2{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:0}
+.tab2{display:flex;align-items:center;gap:8px;font-family:var(--sans);font-size:13px;color:var(--ink2);
+  background:var(--panel2);border:1px solid var(--line);border-bottom:none;border-radius:9px 9px 0 0;
+  padding:9px 15px;cursor:pointer;position:relative;top:1px}
+.tab2:hover{color:var(--ink)}
+.tab2.active{background:var(--panel);color:var(--ink);font-weight:600;border-color:var(--line);z-index:2}
+.tab2 .dotr{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.tab2 .dotr.base{background:var(--base)}.tab2 .dotr.fall{background:var(--fall)}
+.tab2 .dotr.esc{background:var(--esc)}.tab2 .dotr.proh{background:var(--proh)}
+.tpanel{border:1px solid var(--line);border-radius:0 11px 11px 11px;padding:16px 18px;background:var(--panel)}
+.tpanelhead{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.tpanelhead .tname{font-size:12px;color:var(--ink2)}
+/* notes for counsel */
+.note{border-radius:10px;padding:13px 16px;margin-top:16px}
+.note.red{background:var(--prohBg);border:1px solid #E4B7B2}
+.note.usage{background:var(--panel2);border:1px solid var(--line)}
+.note .nlab{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px;font-weight:600}
+.note.red .nlab{color:var(--proh)}.note.usage .nlab{color:var(--ink3)}
+.note ul{margin:0;padding-left:18px}
+.note li{font-size:12.5px;line-height:1.55;margin-bottom:4px}
+.note.red li{color:#5e211e}.note.usage li{color:var(--ink2)}
+
 /* ---------- forms ---------- */
 .field{margin-bottom:16px}
 .field label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin-bottom:6px}

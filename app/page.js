@@ -212,6 +212,12 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
         </div>
         <select value={cat} onChange={(e) => setCat(e.target.value)}>{cats.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         <span className="chip">{list.length} results</span>
+        {isReviewer && clauses.length > 0 && (
+          <button className="btn sm ghost" onClick={loadClauses} disabled={seedState === "loading"}
+            title="Reload all clauses from the current master Playbook">
+            {seedState === "loading" ? "Syncing…" : "Re-sync from master"}
+          </button>
+        )}
       </div>
       <div className="grid">
         {list.map((c) => (
@@ -237,17 +243,17 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
 }
 
 function ClauseModal({ c, onClose, onPropose, showToast }) {
-  const copy = (t) => { navigator.clipboard?.writeText(t); showToast("Clause text copied"); };
-  const V = (label, tier, text, red) => text ? (
-    <div className="variant">
-      <div className="vlabel">
-        <span className={"tier " + TIERS[tier].c}>{TIERS[tier].l}</span>
-        <span>{label}</span>
-        <button className="copyb" onClick={() => copy(text)}>Copy</button>
-      </div>
-      <div className={"vtext" + (red ? " red" : "")}>{text}</div>
-    </div>
-  ) : null;
+  const copy = (t, label) => { navigator.clipboard?.writeText(t); showToast(`${label} copied`); };
+  const TEMPLATES = [
+    { key: "baseline", tier: "baseline", label: "Baseline", note: "Balanced position" },
+    { key: "buyside",  tier: "baseline", label: "Buy-Side", note: "Maximum protection" },
+    { key: "sellside", tier: "baseline", label: "Sell-Side", note: "Liability-controlled" },
+    { key: "fallback", tier: "fallback", label: "Acceptable Fallback", note: "Negotiated minimum" },
+  ].filter((t) => (c[t.key] || "").trim());
+  const [active, setActive] = useState(TEMPLATES[0]?.key || "baseline");
+  const cur = TEMPLATES.find((t) => t.key === active) || TEMPLATES[0];
+  const redflags = (c.redflags || "").split("\n").map((s) => s.trim()).filter(Boolean);
+  const usage = (c.usageNotes || "").split("\n").map((s) => s.trim()).filter(Boolean);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -255,20 +261,47 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
         <div className="mhead">
           <div className="cnum">CL-{String(c.id).padStart(2, "0")} · {c.cat}</div>
           <div className="ctitle" style={{ fontSize: "23px", margin: "5px 0" }}>{c.title}</div>
-          <div className="cpurpose" style={{ WebkitLineClamp: 99, fontStyle: "italic" }}>{c.purpose}</div>
+          {c.purpose && <div className="purposenote"><span className="lab">Purpose</span><span className="txt">{c.purpose}</span></div>}
           <button className="mclose" onClick={onClose}>×</button>
         </div>
         <div className="mbody">
-          <div className="flagbox"><b>Classification discipline</b>Tiers shown are the Playbook structural tiers; variant text reproduces Playbook v3.0 verbatim. Unless a position is expressly marked Mandatory Law with a cited source note, treat it as internal policy / preferred posture. Verify all regulatory citations before reliance; flag deviations to Head of Legal.</div>
-          {V("Baseline Clause — Balanced", "baseline", c.baseline)}
-          {V(`Buy-Side Variant — Max ${COMPANY_LABEL} Protection`, "baseline", c.buyside)}
-          {V("Sell-Side Variant — Liability-Controlled", "baseline", c.sellside)}
-          {V("Acceptable Fallback", "fallback", c.fallback)}
-          {V("⚠ Red Flags — Do Not Accept Without Documented Approval", "prohibited", c.redflags, true)}
+          <div className="sectlabel"><span className="t">Clause Templates</span><span className="h">— ready to drop into a contract</span></div>
+          {cur ? (
+            <>
+              <div className="tabs2">
+                {TEMPLATES.map((t) => (
+                  <button key={t.key} className={"tab2 " + (active === t.key ? "active" : "")} onClick={() => setActive(t.key)}>
+                    <span className={"dotr " + TIERS[t.tier].c}></span>{t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="tpanel">
+                <div className="tpanelhead">
+                  <span className={"tier " + TIERS[cur.tier].c}>{TIERS[cur.tier].l}</span>
+                  <span className="tname">{cur.note}</span>
+                  <button className="copyb" onClick={() => copy(c[cur.key], cur.label)}>⧉ Copy</button>
+                </div>
+                <div className="vtext">{c[cur.key]}</div>
+              </div>
+            </>
+          ) : <div className="hint">No drafting template recorded for this clause.</div>}
+
+          {redflags.length > 0 && (
+            <div className="note red">
+              <div className="nlab">⚠ Red flags — do not accept without documented approval</div>
+              <ul>{redflags.map((r, i) => <li key={i}>{r}</li>)}</ul>
+            </div>
+          )}
+          {usage.length > 0 && (
+            <div className="note usage">
+              <div className="nlab">Usage notes</div>
+              <ul>{usage.map((u, i) => <li key={i}>{u}</li>)}</ul>
+            </div>
+          )}
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Close</button>
-          <button className="btn" onClick={() => copy([c.title, "", c.baseline].join("\n"))}>Copy Baseline</button>
+          {cur && <button className="btn" onClick={() => copy(c[cur.key], cur.label)}>Copy {cur.label}</button>}
           <button className="btn primary" onClick={() => { onPropose(c); }}>Propose Change →</button>
         </div>
       </div>
