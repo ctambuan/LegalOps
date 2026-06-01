@@ -192,5 +192,7 @@ Open items still outstanding at v0.7: OI4 (allowlist governance / offboarding ow
 re-seed of the derived `clauses` collection when the master version bumps). Recommended next: complete
 the access safety test; add team members; replace the `[Company]` label with the real organisation name.
 
+| 2026-06-01 | v3.1 (Playbook) | Full magic-circle redraft of all 74 clauses completed and deployed live, in 15 reviewed cohorts: every template made operative and paste-ready, consistent defined terms (the Company / the Counterparty / this Agreement etc.), UK/Commonwealth spelling, (a)/(i) numbering, cross-refs as `Clause [●] (Title)`; guidance separated into Notes for Counsel; risk-allocation cluster (CL-36–40) elevated; CL-05 Term recovered as Model 1–4 tabs. Master Playbook re-issued as **v3.1** (`/playbook/00.01_..._v3.1_2026-06-01.docx`): clause bodies replaced in place from the redrafted set; all front matter, methodology, negotiation matrix, glossary, headers/footers and numbering preserved; validated. Dashboard and master now carry the same clause content. | AI eng (redraft adopted by Head of Legal) |
+
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
