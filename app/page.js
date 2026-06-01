@@ -1,7 +1,7 @@
 // app/page.js — main client application.
 "use client";
 export const dynamic = "force-dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
   listenClauses, listenProposals, listenAdopted,
@@ -174,13 +174,19 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [sel, setSel] = useState(null);
-  const [seeding, setSeeding] = useState(false);
+  // First-time setup: an empty library is auto-populated for the reviewer (no manual step).
+  const [seedState, setSeedState] = useState("idle"); // idle | loading | error
+  const triedRef = useRef(false);
   const loadClauses = async () => {
-    setSeeding(true);
-    try { const n = await seedClausesViaApi(); showToast(`Loaded ${n} Playbook clauses`); }
-    catch (e) { console.error(e); showToast(e.message || "Load failed — see console"); }
-    setSeeding(false);
+    setSeedState("loading");
+    try { const n = await seedClausesViaApi(); showToast(`Loaded ${n} Playbook clauses`); setSeedState("idle"); }
+    catch (e) { console.error(e); setSeedState("error"); showToast(e.message || "Load failed — see console"); }
   };
+  useEffect(() => {
+    if (!isReviewer || clauses.length > 0 || triedRef.current) return;
+    triedRef.current = true;
+    loadClauses();
+  }, [isReviewer, clauses.length]); // eslint-disable-line
   const cats = useMemo(() => ["All", ...Array.from(new Set(clauses.map((c) => c.cat)))], [clauses]);
   const list = useMemo(() => clauses.filter((c) => {
     const m = (c.title + " " + c.purpose + " " + c.baseline).toLowerCase().includes(q.toLowerCase());
@@ -189,10 +195,13 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
 
   return (
     <>
-      {clauses.length === 0 && isReviewer && (
+      {clauses.length === 0 && isReviewer && seedState === "loading" && (
+        <div className="lockmsg">Setting up the library — loading the {PLAYBOOK_VERSION} Playbook clauses…</div>
+      )}
+      {clauses.length === 0 && isReviewer && seedState === "error" && (
         <div className="lockmsg" style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "space-between", flexWrap: "wrap" }}>
-          <span>One-time setup: load the {PLAYBOOK_VERSION} Playbook clauses into the library. Only you (the Head of Legal) can do this, and the clause text is written securely on the server.</span>
-          <button className="btn primary" onClick={loadClauses} disabled={seeding}>{seeding ? "Loading…" : "Load Playbook clauses"}</button>
+          <span>Couldn’t load the Playbook clauses automatically. This usually means the database rules or your reviewer record need a moment — click to retry.</span>
+          <button className="btn primary" onClick={loadClauses}>Retry</button>
         </div>
       )}
       <div className="toolbar">
