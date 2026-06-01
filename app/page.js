@@ -245,8 +245,9 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
             <div className="cpurpose">{c.purpose || "—"}</div>
             <div className="cvariants">
               {clauseTemplates(c).map((t, i) => (
-                <span key={i} className="vtag on">
-                  <span className={"dotr " + (TIERS[t.tier] ? TIERS[t.tier].c : "neutral")}></span>{t.label}
+                <span key={i} className="vtag on" title={t.label}>
+                  {/* Card shows the short label (e.g. "Model 1"); the modal tab keeps the full label. */}
+                  <span className={"dotr " + (TIERS[t.tier] ? TIERS[t.tier].c : "neutral")}></span>{t.label.split("—")[0].trim()}
                 </span>
               ))}
               {(c.redflags || "").trim() && (
