@@ -176,11 +176,12 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
   const [sel, setSel] = useState(null);
   // First-time setup: an empty library is auto-populated for the reviewer (no manual step).
   const [seedState, setSeedState] = useState("idle"); // idle | loading | error
+  const [seedErr, setSeedErr] = useState("");
   const triedRef = useRef(false);
   const loadClauses = async () => {
-    setSeedState("loading");
+    setSeedState("loading"); setSeedErr("");
     try { const n = await seedClausesViaApi(); showToast(`Loaded ${n} Playbook clauses`); setSeedState("idle"); }
-    catch (e) { console.error(e); setSeedState("error"); showToast(e.message || "Load failed — see console"); }
+    catch (e) { console.error(e); setSeedErr(e.message || String(e)); setSeedState("error"); }
   };
   useEffect(() => {
     if (!isReviewer || clauses.length > 0 || triedRef.current) return;
@@ -200,7 +201,7 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
       )}
       {clauses.length === 0 && isReviewer && seedState === "error" && (
         <div className="lockmsg" style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "space-between", flexWrap: "wrap" }}>
-          <span>Couldn’t load the Playbook clauses automatically. This usually means the database rules or your reviewer record need a moment — click to retry.</span>
+          <span>Couldn’t load the Playbook clauses. <b>Reason:</b> {seedErr || "unknown error"}</span>
           <button className="btn primary" onClick={loadClauses}>Retry</button>
         </div>
       )}
