@@ -8,7 +8,7 @@ Document Number Generator, Compliance Tracker, Budget Tracker.
 **Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not Legal Department position)
 **Classification:** Confidential & Legally Privileged — [Company] internal use only
-**Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.0 (08 May 2026)
+**Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.1 (01 Jun 2026)
 **Last updated:** see Change Log (Section 12)
 
 > This PRD is the single controlling record for the Workbench. Every architectural, product, or
@@ -124,7 +124,10 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 ## 8. Data Model (Firestore)
 
 - `clauses/{id}` — seed reference (read-only): title, cat, purpose, baseline, buyside, sellside,
-  fallback, redflags, playbookVersion.
+  fallback, redflags, usageNotes, counselNotes, playbookVersion, and optional `variants[]`
+  (clause-specific labelled drafting models, e.g. CL-05 Term's Model 1–4 — each `{label, tier, note,
+  text}`). The clause-detail tabs and the library-card tags are both derived from `variants` when
+  present, otherwise from the standard positions that have text — a single source so they always match.
 - `proposals/{id}` — type, jurisdiction, title, baseRef, tier, classification, text, rationale,
   redflag, originalText, status, authorEmail, authorName, createdAt, reviewedAt, reviewerEmail,
   reviewNote.
@@ -171,8 +174,13 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
   accepted that Firestore data resides in Jakarta (asia-southeast2) while Firebase Authentication runs as
   a global service. Acceptable for v1.
 - OI4. **Allowlist governance.** Who maintains the allowlist; offboarding process.
-- OI5. **Playbook update process.** When Playbook v3.1 issues, how is the seed re-synced without
-  losing adopted addenda linkage.
+- OI5. **Playbook update process.** PARTIALLY ADDRESSED (2026-06-01): the manual `.docx → seed JSON`
+  re-sync + version-tag bump is now a documented release checklist in `/playbook/README.md`, and the
+  app stamps re-synced clauses and adopted addenda with a single env-overridable `PLAYBOOK_VERSION_TAG`
+  (now `v3.1`) — so "Re-sync from master" reloads the current clause text and labels it correctly (it
+  reloads from the derived seed JSON, by design, not live from Drive). Still open: preserving adopted-
+  addenda linkage across a version bump (each addendum keeps the `playbookVersion` stamp it was adopted
+  under, but there is no automated re-mapping of an addendum onto a re-numbered/redrafted clause).
 
 ## 12. Change Log
 
@@ -196,6 +204,8 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-01 | v3.1 (Playbook) | Full magic-circle redraft of all 74 clauses completed and deployed live, in 15 reviewed cohorts: every template made operative and paste-ready, consistent defined terms (the Company / the Counterparty / this Agreement etc.), UK/Commonwealth spelling, (a)/(i) numbering, cross-refs as `Clause [●] (Title)`; guidance separated into Notes for Counsel; risk-allocation cluster (CL-36–40) elevated; CL-05 Term recovered as Model 1–4 tabs. Master Playbook re-issued as **v3.1** (`/playbook/00.01_..._v3.1_2026-06-01.docx`): clause bodies replaced in place from the redrafted set; all front matter, methodology, negotiation matrix, glossary, headers/footers and numbering preserved; validated. Dashboard and master now carry the same clause content. | AI eng (redraft adopted by Head of Legal) |
 
 | 2026-06-01 | v3.1 (record) | Drive records reorganised into a dedicated **"Legal Operations Workbench"** Google Drive folder (ID `1EUxfSoMhazorsUNEbSPSqruhukd3Nure`), now the canonical Drive location (superseding the personal-named folder; records moved by the Head of Legal). File-naming convention adopted for Drive records: **"Legal Operations Workbench - PRD v[X].[Y] - [YYYY-MM-DD]"** (and analogous for other artefacts). Drive-location references in this PRD (Section 7, OI2) updated accordingly. | AI eng |
+
+| 2026-06-01 | v3.1 (engine) | Contracting Engine corrected to reflect the live v3.1 master. (a) **Version stamping fixed:** "Re-sync from master" was writing every clause to Firestore labelled `v3.0` (the seed JSON carries no version field and the writer defaulted to a literal "v3.0"), and adopted addenda were likewise stamped `v3.0`, despite the seed content being the v3.1 redraft. Introduced a single env-overridable `PLAYBOOK_VERSION_TAG` (now `v3.1`) used for both the clause re-sync stamp and the adopted-addenda stamp, and bumped the display `PLAYBOOK_VERSION` default to `v3.1 (01 Jun 2026)`. Confirmed the Drive folder's current master is `...v3.1_2026-06-01.docx`. (b) **Library-card tags now reflect each clause's own templates:** cards previously hardcoded five tags (Baseline/Buy-Side/Sell-Side/Fallback/Red Flags) lit on/off by flat fields, so clauses with bespoke models (CL-05 Term's Model 1–4) showed wrong/empty tags. A single `clauseTemplates()` helper now drives both the card tags and the clause-detail tabs from the same source (a clause's `variants` when defined, else the standard positions with text), so tags and tabs always match; CL-05 shows its model labels (shortened to "Model 1"…"Model 4" on the card, full label in the tab and on hover); tags carry tier-colour dots. (c) Manual `.docx → seed JSON` + version-tag release checklist documented in `/playbook/README.md`; OI5 updated to PARTIALLY ADDRESSED. Section 8 data model updated to record `variants[]`, usageNotes and counselNotes. Lint, build and type-check pass clean. No change to the anti-drift model: re-sync reloads the derived seed JSON (by design), not live from Drive. | AI eng |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
