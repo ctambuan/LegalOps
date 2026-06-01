@@ -169,6 +169,23 @@ export default function Page() {
   );
 }
 
+// Standard drafting positions used when a clause does not define its own variants.
+const VARIANT_DEFAULTS = [
+  { key: "baseline", tier: "baseline", label: "Baseline", note: "Balanced position" },
+  { key: "buyside",  tier: "baseline", label: "Buy-Side", note: "Maximum protection" },
+  { key: "sellside", tier: "baseline", label: "Sell-Side", note: "Liability-controlled" },
+  { key: "fallback", tier: "fallback", label: "Acceptable Fallback", note: "Negotiated minimum" },
+];
+
+// A clause's drafting templates: its own labelled variants (e.g. Term's Model 1–4)
+// when defined, otherwise the standard positions that actually have recorded text.
+// Single source of truth so the library-card tags and the clause-detail tabs always match.
+function clauseTemplates(c) {
+  return (Array.isArray(c.variants) && c.variants.length)
+    ? c.variants.map((v) => ({ label: v.label, tier: v.tier || "baseline", note: v.note || "", text: v.text || "", whenToUse: v.whenToUse }))
+    : VARIANT_DEFAULTS.filter((t) => (c[t.key] || "").trim()).map((t) => ({ label: t.label, tier: t.tier, note: t.note, text: c[t.key] }));
+}
+
 /* ---------------- Library ---------------- */
 function Library({ clauses, onPropose, showToast, isReviewer }) {
   const [q, setQ] = useState("");
@@ -227,11 +244,14 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
             <div className="ctitle">{c.title}</div>
             <div className="cpurpose">{c.purpose || "—"}</div>
             <div className="cvariants">
-              <span className={"vtag " + (c.baseline ? "on" : "")}>Baseline</span>
-              <span className={"vtag " + (c.buyside ? "on" : "")}>Buy-Side</span>
-              <span className={"vtag " + (c.sellside ? "on" : "")}>Sell-Side</span>
-              <span className={"vtag " + (c.fallback ? "on" : "")}>Fallback</span>
-              <span className={"vtag " + (c.redflags ? "on" : "")}>Red Flags</span>
+              {clauseTemplates(c).map((t, i) => (
+                <span key={i} className="vtag on">
+                  <span className={"dotr " + (TIERS[t.tier] ? TIERS[t.tier].c : "neutral")}></span>{t.label}
+                </span>
+              ))}
+              {(c.redflags || "").trim() && (
+                <span className="vtag on"><span className="dotr proh"></span>Red Flags</span>
+              )}
             </div>
           </div>
         ))}
@@ -244,16 +264,8 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
 
 function ClauseModal({ c, onClose, onPropose, showToast }) {
   const copy = (t, label) => { navigator.clipboard?.writeText(t); showToast(`${label} copied`); };
-  const DEFAULTS = [
-    { key: "baseline", tier: "baseline", label: "Baseline", note: "Balanced position" },
-    { key: "buyside",  tier: "baseline", label: "Buy-Side", note: "Maximum protection" },
-    { key: "sellside", tier: "baseline", label: "Sell-Side", note: "Liability-controlled" },
-    { key: "fallback", tier: "fallback", label: "Acceptable Fallback", note: "Negotiated minimum" },
-  ];
-  // Clauses may define their own labelled variants (e.g. Term's Model 1–4); otherwise use the four defaults.
-  const templates = (Array.isArray(c.variants) && c.variants.length)
-    ? c.variants.map((v) => ({ label: v.label, tier: v.tier || "baseline", note: v.note || "", text: v.text || "" }))
-    : DEFAULTS.filter((t) => (c[t.key] || "").trim()).map((t) => ({ label: t.label, tier: t.tier, note: t.note, text: c[t.key] }));
+  // Same source as the library-card tags, so tabs and tags always match.
+  const templates = clauseTemplates(c);
   const [active, setActive] = useState(0);
   const cur = templates[active] || templates[0];
   const redflags = (c.redflags || "").split("\n").map((s) => s.trim()).filter(Boolean);
