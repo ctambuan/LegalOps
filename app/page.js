@@ -67,48 +67,63 @@ export default function Page() {
 
   const pending = proposals.filter((p) => p.status === "pending").length;
 
+  const PAGE = {
+    library: { eyebrow: `Playbook ${PLAYBOOK_VERSION} · ${clauses.length} clauses`, title: "Clause Library",
+      sub: "The controlled source of contracting positions. Retrieve any clause with its baseline, buy-side, sell-side and fallback variants — each labelled by tier and classification." },
+    contribute: { eyebrow: "Working draft until adopted", title: "Propose / Draft",
+      sub: "Submit an improvement, additional fallback, conditional expansion, or new clause. It routes to the Head of Legal for review and does not change the library until adopted." },
+    review: { eyebrow: "Head of Legal only", title: "Review Queue",
+      sub: "Each submission is a working draft until you adopt it. Compare the proposed text against the current Playbook position, then approve and adopt, request changes, or reject." },
+    master: { eyebrow: `${adopted.length} adopted`, title: "Master & Export",
+      sub: "The live record of positions adopted as addenda to the Playbook. Export the full master as a formatted Word document; each export is logged." },
+  };
+  const pg = PAGE[tab] || PAGE.library;
+
+  const NavItem = (key, label, badge) => (
+    <button className={"navitem " + (tab === key ? "active" : "")} onClick={() => setTab(key)}>
+      <span className="dot"></span>{label}{badge ? <span className="badge">{badge}</span> : null}
+    </button>
+  );
+
   return (
     <div className="wrap">
-      <header>
-        <div className="kicker">{COMPANY_LABEL} · Legal Department · Confidential &amp; Privileged</div>
-        <h1>Clause Library Workbench</h1>
-        <div className="sub">Live collaborative drafting against the Contract Review Playbook {PLAYBOOK_VERSION} — retrieve, propose, review, adopt.</div>
-        <div className="metarow">
-          <span className="chip ok">{PLAYBOOK_VERSION}</span>
-          <span className="chip">{clauses.length} clauses</span>
-          <span className="chip">Four-tier classification enforced</span>
-          <span className="chip warn">Working drafts — not Legal Dept position until adopted</span>
-          <span className="chip">{user.email} · {role}</span>
+      <aside className="side">
+        <div className="brand">
+          <div className="wm">Clause Workbench</div>
+          <div className="eyebrow">{COMPANY_LABEL} · Legal</div>
+        </div>
+        <nav className="nav">
+          {NavItem("library", "Clause Library")}
+          {NavItem("contribute", "Propose / Draft")}
+          {isReviewer && NavItem("review", "Review", pending)}
+          {NavItem("master", "Master & Export", adopted.length || 0)}
+        </nav>
+        <div className="who">
+          <div>
+            <div className="nm">{user.email}</div>
+            <div className="rl">{role}</div>
+          </div>
           <button className="btn sm ghost" onClick={logout}>Sign out</button>
         </div>
-        <nav className="tabs">
-          <button className={"tab " + (tab === "library" ? "active" : "")} onClick={() => setTab("library")}>Clause Library</button>
-          <button className={"tab " + (tab === "contribute" ? "active" : "")} onClick={() => setTab("contribute")}>Propose / Draft</button>
-          {isReviewer && (
-            <button className={"tab locked " + (tab === "review" ? "active" : "")} onClick={() => setTab("review")}>
-              ⚖ Review{pending ? <span className="badge">{pending}</span> : null}
-            </button>
-          )}
-          <button className={"tab " + (tab === "master" ? "active" : "")} onClick={() => setTab("master")}>
-            Master &amp; Export{adopted.length ? <span className="badge">{adopted.length}</span> : null}
-          </button>
-        </nav>
-      </header>
+      </aside>
 
-      <main>
-        {tab === "library" && <Library clauses={clauses} onPropose={(c) => { setPrefill(c); setTab("contribute"); }} showToast={showToast} />}
-        {tab === "contribute" && <Contribute prefill={prefill} clearPrefill={() => setPrefill(null)} user={user}
-          onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
-        {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
-        {tab === "master" && <Master adopted={adopted} isReviewer={isReviewer} user={user} showToast={showToast} />}
-      </main>
+      <div className="main">
+        <div className="topbar">
+          <div className="kicker">{pg.eyebrow}</div>
+          <h1>{pg.title}</h1>
+          <div className="sub">{pg.sub}</div>
+        </div>
 
-      <div className="priv">This workbench and its contents are the confidential and legally privileged property of
-        {COMPANY_LABEL} and its group companies, for internal Legal Department use only. AI-assisted
-        outputs remain working drafts subject to human review by qualified {COMPANY_LABEL} counsel and do not constitute legal
-        advice or a Legal Department position until reviewed and adopted by the Head of Legal. Positions are classified
-        per the Playbook four-tier scheme; only positions expressly marked Mandatory Law with a cited source note
-        represent verified legal requirements — all citations require verification before reliance.</div>
+        <div className="content">
+          {tab === "library" && <Library clauses={clauses} onPropose={(c) => { setPrefill(c); setTab("contribute"); }} showToast={showToast} />}
+          {tab === "contribute" && <Contribute prefill={prefill} clearPrefill={() => setPrefill(null)} user={user}
+            onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
+          {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
+          {tab === "master" && <Master adopted={adopted} isReviewer={isReviewer} user={user} showToast={showToast} />}
+        </div>
+
+        <div className="priv">This workbench and its contents are the confidential and legally privileged property of {COMPANY_LABEL} and its group companies, for internal Legal Department use only. AI-assisted outputs remain working drafts subject to human review by qualified {COMPANY_LABEL} counsel and do not constitute legal advice or a Legal Department position until reviewed and adopted by the Head of Legal. Positions are classified per the Playbook four-tier scheme; only positions expressly marked Mandatory Law with a cited source note represent verified legal requirements — all citations require verification before reliance.</div>
+      </div>
 
       {toast && <div className="toast">{toast}</div>}
     </div>
