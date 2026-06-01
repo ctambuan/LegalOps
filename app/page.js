@@ -276,16 +276,17 @@ function ClauseModal({ c, onClose, onPropose, showToast }) {
               <div className="tabs2">
                 {templates.map((t, i) => (
                   <button key={i} className={"tab2 " + (active === i ? "active" : "")} onClick={() => setActive(i)}>
-                    <span className={"dotr " + TIERS[t.tier].c}></span>{t.label}
+                    <span className={"dotr " + (TIERS[t.tier] ? TIERS[t.tier].c : "neutral")}></span>{t.label}
                   </button>
                 ))}
               </div>
               <div className="tpanel">
                 <div className="tpanelhead">
-                  <span className={"tier " + TIERS[cur.tier].c}>{TIERS[cur.tier].l}</span>
+                  {TIERS[cur.tier] && <span className={"tier " + TIERS[cur.tier].c}>{TIERS[cur.tier].l}</span>}
                   {cur.note && <span className="tname">{cur.note}</span>}
                   <button className="copyb" onClick={() => copy(cur.text, cur.label)}>⧉ Copy</button>
                 </div>
+                {cur.whenToUse && <div className="whenuse"><b>When to use</b> {cur.whenToUse}</div>}
                 <div className="vtext">{cur.text}</div>
               </div>
             </>

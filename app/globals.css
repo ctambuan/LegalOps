@@ -153,6 +153,10 @@ select:focus{outline:none;border-color:var(--ink3)}
 .tab2 .dotr{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .tab2 .dotr.base{background:var(--base)}.tab2 .dotr.fall{background:var(--fall)}
 .tab2 .dotr.esc{background:var(--esc)}.tab2 .dotr.proh{background:var(--proh)}
+.tab2 .dotr.neutral{background:var(--ink3)}
+.whenuse{font-size:12px;color:var(--ink2);background:var(--panel2);border:1px solid var(--line);
+  border-radius:7px;padding:9px 12px;margin-bottom:11px;line-height:1.5}
+.whenuse b{color:var(--ink3);text-transform:uppercase;font-size:10px;letter-spacing:.08em;margin-right:7px}
 .tpanel{border:1px solid var(--line);border-radius:0 11px 11px 11px;padding:16px 18px;background:var(--panel)}
 .tpanelhead{display:flex;align-items:center;gap:11px;margin-bottom:11px}
 .tpanelhead .tname{font-size:12px;color:var(--ink2)}
