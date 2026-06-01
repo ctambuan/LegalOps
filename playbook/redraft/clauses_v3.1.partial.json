@@ -572,5 +572,37 @@
   "sellside": "",
   "fallback": "",
   "counselNotes": "Preferred governing-law hierarchy: (a) Singapore law for cross-border commercial contracts between non-Indonesian parties; (b) Indonesian law where mandatory by regulation or where the contract is primarily performed in Indonesia by Indonesian entities; (c) another jurisdiction only where legally required and approved by the Head of Legal. The Company prefers Singapore law for platform and technology-supply agreements, subject to mandatory-law overrides. Select governing law at the start of negotiations, not as a late-stage concession. Accept the counterparty's home-jurisdiction law only where (i) enforcement, mandatory-law, tax, regulatory and dispute risks have been assessed by Legal; and (ii) enforcement against the Company there is not materially disadvantageous."
+ },
+ "71": {
+  "title": "Dispute Resolution",
+  "baseline": "Dispute Resolution.\n(a) Escalation. If a dispute arises under this Agreement, the Parties shall first escalate it to their respective senior representatives for good-faith resolution within [thirty (30)] days of written notice.\n(b) Arbitration or court. If the dispute is not resolved, it shall be submitted to: (i) [Option A — Arbitration:] arbitration administered by [SIAC / BANI / ICC], seated in [Singapore / Jakarta / city], under the [SIAC / BANI / ICC] Rules, before [3 / 1] arbitrator(s), conducted in [English / Bahasa Indonesia], the award being final and binding; or (ii) [Option B — Court:] the exclusive jurisdiction of the courts of [Singapore / Indonesia / jurisdiction].\n(c) Emergency relief. Nothing in this Clause restricts either Party from seeking urgent or interim relief from any court of competent jurisdiction.",
+  "buyside": "",
+  "sellside": "",
+  "fallback": "Mediation Before Arbitration. The Parties shall attempt mediation before commencing arbitration, provided that the mediation does not exceed [thirty (30)] days and does not restrict either Party from seeking urgent or interim relief.",
+  "counselNotes": "For cross-border, high-value or regulated contracts, prefer SIAC arbitration seated in Singapore; for Indonesia-domestic contracts, consider BANI arbitration or the Indonesian courts depending on enforcement needs. Preserve (a) emergency-arbitrator rights (e.g. the SIAC Emergency Arbitrator Procedure); (b) the right to urgent court interim relief notwithstanding arbitration; and (c) a debt-recovery carve-out from arbitration for clear, undisputed payment obligations. Where the Company is the supplier, it prefers the Singapore courts for its commercial contracts (or SIAC arbitration for enforcement-sensitive contracts) and reserves the right to bring debt-recovery and urgent injunctive proceedings in any competent court."
+ },
+ "72": {
+  "title": "Boilerplate Hierarchy and Conflict Provisions",
+  "baseline": "Hierarchy and Conflict of Provisions. The boilerplate provisions shall be interpreted consistently with, and subject to, the operative commercial, regulatory, data, security, IP, liability, indemnity and termination provisions. In the event of any conflict or inconsistency between a specific provision and a general provision, the specific provision shall prevail.",
+  "buyside": "",
+  "sellside": "Company Documents Prevail (Platform Matters). The Company's acceptable-use policy, platform terms and service documentation prevail over the Counterparty's general boilerplate for matters relating to platform access, usage restrictions and service parameters.",
+  "fallback": "",
+  "counselNotes": "Ensure the Data Processing Addendum, information-security schedule and regulatory-compliance schedules prevail over general boilerplate for their subject matter. A standard conflict-of-provisions clause is acceptable where the order of precedence is clearly documented."
+ },
+ "73": {
+  "title": "Execution Blocks, Signing Authority and Approvals",
+  "baseline": "Execution, Signing Authority and Approvals. Each signatory represents and warrants that he or she: (a) is duly authorised to execute this Agreement on behalf of the relevant Party; (b) has obtained all necessary internal approvals, board resolutions and regulatory consents required for execution; and (c) confirms that execution of this Agreement does not breach any provision of the Party's constitutional documents or any agreement by which it is bound.",
+  "buyside": "Execution Verification (Material Contracts). For material contracts: (a) the correct legal entity name shall be verified against registration documents; (b) the signatory's title, authority and identity shall be confirmed; (c) a board resolution, power of attorney or delegation-of-authority confirmation shall be attached where the contract value or risk warrants; (d) a company stamp or seal shall be applied where required by applicable law; and (e) notarisation or apostille shall be obtained where required for enforcement.",
+  "sellside": "Execution Methods (Company as Supplier). The Company may accept execution through (a) an authorised electronic-signature platform (such as DocuSign or Adobe Sign); or (b) clickwrap acceptance for standard platform terms, in each case subject to the Company's internal delegation-of-authority requirements.",
+  "fallback": "Standard Signature Blocks. Standard signature blocks are acceptable for ordinary contracts; additional evidence (board resolution, power of attorney or witness) shall be required for high-value, regulated, M&A or financing transactions.",
+  "counselNotes": ""
+ },
+ "74": {
+  "title": "Schedules and Annexes",
+  "baseline": "Schedules and Annexes. All Schedules, Annexes and Order Forms attached to this Agreement form an integral part of it, and each shall be consistent with the main body. In the event of any conflict between a Schedule and the main body, the order of precedence in Clause [●] (Order of Precedence) applies. No term in a Schedule, Annex, Order Form, Statement of Work, Purchase Order or online policy shall expand, limit, override or contradict the main body of this Agreement unless expressly stated in the Order of Precedence clause.",
+  "buyside": "",
+  "sellside": "Order Forms (Company as Supplier). Use Order Forms for commercial terms (pricing, volume, user count) but keep all legal protections in the Master Agreement, and ensure that Order Forms cannot override the Master Agreement terms.",
+  "fallback": "",
+  "counselNotes": "Review all Schedules with the same rigour as the main body. Common risk areas: (a) Fees schedule — hidden price-adjustment mechanisms, success fees or ratchets; (b) Statement of Work — scope creep, unlimited deliverable revisions, unclear acceptance criteria; (c) Data Processing Addendum — weakened security standards, expanded sub-processor lists, reduced breach timelines; (d) Security schedule — certifications below the minimum standard; (e) Service Levels — uptime carve-outs that eliminate the practical SLA; (f) Transition plan — insufficient operational detail. Schedules containing only operational detail may be accepted without full legal review provided they contain no legal terms, risk allocations or obligations not covered by the main body."
  }
 }
