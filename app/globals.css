@@ -111,6 +111,7 @@ select:focus{outline:none;border-color:var(--ink3)}
 .vtag .dotr.base{background:var(--base)}.vtag .dotr.fall{background:var(--fall)}
 .vtag .dotr.esc{background:var(--esc)}.vtag .dotr.proh{background:var(--proh)}
 .vtag .dotr.neutral{background:var(--ink3)}
+.staletag{display:inline-block;margin-left:6px;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:10px;background:var(--proh,#7a2230);color:#fff}
 
 /* ---------- modal (clause detail) ---------- */
 .overlay{position:fixed;inset:0;background:rgba(22,20,15,.4);backdrop-filter:blur(3px);z-index:50;

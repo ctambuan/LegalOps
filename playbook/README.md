@@ -1,7 +1,7 @@
 # Master Playbook — canonical source of truth
 
-**Current file:** `00.01_Pluang_Contracting_Playbook_v3.1_2026-06-01.docx` (v3.1 — all 74 clauses redrafted)
-**Prior version:** `00.01_Pluang_Contracting_Playbook_v3.0_08_May_2026.docx` (retained for audit)
+**Current file:** `00.01_Pluang_Contracting_Playbook_v3.2_2026-06-02.docx` (v3.2 — CL-31 Non-Exclusivity baseline recalibrated from an adopted addendum)
+**Prior versions:** `00.01_Pluang_Contracting_Playbook_v3.1_2026-06-01.docx` and `..._v3.0_08_May_2026.docx` (retained for audit)
 **Classification:** Confidential & Legally Privileged — internal use only.
 
 This Word document is the **controlling master** for the clause library and contracting positions
@@ -33,6 +33,11 @@ these must move together in the same commit, or the app will serve stale or misl
 3. **Update the "Current file" line above** and retain the prior `.docx` for audit.
 4. **Deliver the new `.docx`** to the Head of Legal for upload to the Drive folder (newest dated
    file = current), and record the calibration in the PRD change log (Section 12).
+5. **Re-confirm adopted addenda (PRD OI5).** After the bump, the Master view and the exported `.docx`
+   flag every adopted addendum still stamped with the *previous* version. Review each flagged addendum
+   against the recalibrated clause text and either re-affirm it (re-adopt) or revise it, so no addendum
+   silently drifts from the new master. This is a deliberate human check — there is no automated
+   re-mapping.
 
 ## Why it lives here
 Kept under version control so revisions are precise, reversible, and auditable, and so the exact
