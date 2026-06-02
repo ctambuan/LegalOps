@@ -201,7 +201,7 @@ function Library({ clauses, onPropose, showToast, isReviewer }) {
   const triedRef = useRef(false);
   const loadClauses = async () => {
     setSeedState("loading"); setSeedErr("");
-    try { const n = await seedClausesViaApi(); showToast(`Loaded ${n} Playbook clauses`); setSeedState("idle"); }
+    try { const { count, source } = await seedClausesViaApi(); showToast(`Loaded ${count} clauses — ${source === "repo" ? "latest from master" : "bundled snapshot"}`); setSeedState("idle"); }
     catch (e) { console.error(e); setSeedErr(e.message || String(e)); setSeedState("error"); }
   };
   useEffect(() => {

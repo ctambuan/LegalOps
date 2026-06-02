@@ -120,11 +120,15 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 - Auth: **Firebase Authentication (Google provider)**. Access + reviewer role resolve from the
   `allowlist/{email}` document's `role` field via Firestore security rules (a `reviewer:true` custom
   claim is also honoured but is optional and not required in the live setup).
-- Clause loading (one-time / re-seed): the privileged clause text is served only to a verified
+- Clause loading / "Re-sync from master": the privileged clause text is served only to a verified
   signed-in user by a server route (`app/api/seed`, which verifies the Firebase ID token against
   Firebase's public keys); the **client then writes the clauses under the user's own Firestore
   session**, so security rules confirm a reviewer. No service-account key, no CLI, no public path.
-  Runs automatically for a reviewer when the library is empty.
+  Runs automatically for a reviewer when the library is empty. **Always-latest:** when `GITHUB_TOKEN`
+  is set, the route reads `data/clauses.seed.json` **live from the production branch at request time**,
+  so re-sync reflects every committed calibration regardless of deploy timing (falls back to the
+  build-bundled seed if the token is unset). This removes the stale-snapshot risk where a re-sync
+  shortly after a calibration could otherwise have reverted it.
 - Document export: client-side .docx generation (docx library); download, or **save directly to the
   Drive folder** via the reviewer's Google OAuth token with the `drive.file` scope (no service-account
   key). Gated by `NEXT_PUBLIC_DRIVE_UPLOAD` (OI1).
@@ -256,6 +260,8 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-02 | v3.2 (Playbook) | **First post-launch calibration** — the discipline exercised end-to-end. An adopted addendum (**CL-31 Non-Exclusivity**, an *Improvement* to the Baseline, proposed by Christine Tambunan and approved by the Head of Legal) was folded into the master: the CL-31 Baseline operative text was revised in the master `.docx` (surgical single-`<w:t>`-run edit; all other package parts copied byte-for-byte; saved as `…_v3.2_2026-06-02.docx`, v3.1 retained for audit) **and** in `data/clauses.seed.json` (identical text — seed and master kept in lockstep). Version bumped v3.1 → v3.2 (`PLAYBOOK_VERSION_TAG`, display default, header, source-of-truth line, `playbook/README.md`). After deploy, **"Re-sync from master"** loads the recalibrated CL-31 into the dashboard clause bank, now stamped v3.2; the prior adopted addendum will show as adopted under v3.1 (older) until re-confirmed, per the OI5 flow. Demonstrates the anti-drift loop: propose → adopt (addendum) → human calibration of the master → re-sync. | AI eng (adopted by Head of Legal) |
 
 | 2026-06-02 | v3.2 (calibration + PDF) | **One-click calibration and full-Playbook PDF.** (a) Master & Export now has a per-addendum **"Calibrate into bank"** control (reviewer picks the target variant): it writes the approved text into the live clause bank (Firestore, `calibrateClauseField`) instantly, and — if `GITHUB_TOKEN` is configured — also auto-commits the change to `data/clauses.seed.json` on the production branch via the new server route `app/api/calibrate` (Firebase-token gated **and** server-side reviewer-checked via Firestore REST; fine-grained PAT, contents:write, single repo). Decided by the Head of Legal to keep a deliberate human gate (not automatic on approval) while removing the manual master-edit/re-sync round trip; the binary master `.docx` is never auto-edited (batch reconciliation at version bumps). §4 updated. (b) New **"Save Playbook PDF to Drive"** button renders the current clause bank (all clauses, current text) to PDF (`lib/pdfPlaybook.js`, jsPDF) and uploads it to the Drive folder via the reviewer's `drive.file` scope (generic `uploadToDrive`). Export buttons relabelled to distinguish the adopted-addenda `.docx` from the full-Playbook PDF. New env: `GITHUB_TOKEN`/`GITHUB_REPO`/`GITHUB_BRANCH` (optional). Lint/build/type-check clean. | AI eng (calibration model approved by Head of Legal) |
+
+| 2026-06-02 | v3.2 (live re-sync) | **"Re-sync from master" now always catches the latest.** `app/api/seed` reads `data/clauses.seed.json` **live from the production branch at request time** when `GITHUB_TOKEN` is set (GitHub contents API, raw, no-store), instead of only the seed bundled at the last build — so re-sync reflects every committed calibration immediately, regardless of deploy timing. Fixes a stale-snapshot footgun where a re-sync shortly after a "Calibrate into bank" could have reverted the calibration. Falls back to the bundled seed if the token is unset/fetch fails; the loader toast now reports the source ("latest from master" vs "bundled snapshot"). Clarified that the structured master for re-sync is the seed JSON (kept current by calibration); the Playbook PDF is the rendered archive, not a re-sync source. §7 + env example updated. Lint/build/type-check clean. | AI eng |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
