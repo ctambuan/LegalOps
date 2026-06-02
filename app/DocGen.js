@@ -50,7 +50,7 @@ function useDriveMirror({ meta, setMeta, showToast }) {
         else throw e;
       }
       if (out.fileId && out.fileId !== meta.fileId) { await setDriveFileId(out.fileId); setMeta((m) => ({ ...m, fileId: out.fileId })); }
-      if (!silent) showToast(`Drive register updated: ${out.file?.name || "saved"}`);
+      if (!silent) showToast(`Google Sheet updated: ${out.file?.name || "saved"}`);
     } catch (e) {
       console.error("Drive mirror failed", e);
       showToast(silent ? "Saved — Drive mirror sync failed (see console)" : (e.message || "Drive sync failed"));
@@ -108,7 +108,7 @@ function Form({ records, settings, meta, setMeta, user, showToast }) {
     <div style={{ maxWidth: 820 }}>
       <div className="lockmsg">Fill the form and click <b>Generate</b>. The document number is built with the exact
         workbook formula, the running sequence is allocated automatically (no collisions), and the record is stored to
-        the live Database{DRIVE_UPLOAD_ENABLED ? " and mirrored to the Drive source-of-truth file" : ""}. Approvers are
+        the live Database{DRIVE_UPLOAD_ENABLED ? " and mirrored to a native Google Sheet in Drive" : ""}. Approvers are
         resolved from the approval matrix in Settings.</div>
 
       {result && (
@@ -248,7 +248,7 @@ function Database({ records, isReviewer, user, showToast, meta, setMeta }) {
         </div>
         <span className="chip">{rows.length} records</span>
         <button className="btn sm ghost" onClick={() => downloadRegisterCsv(records)} title="Download the whole register as CSV">Download CSV ↓</button>
-        {DRIVE_UPLOAD_ENABLED && <button className="btn sm" onClick={syncDrive} disabled={syncing} title="Overwrite the Drive source-of-truth file now">{syncing ? "Syncing…" : "Sync to Drive ↑"}</button>}
+        {DRIVE_UPLOAD_ENABLED && <button className="btn sm" onClick={syncDrive} disabled={syncing} title="Rebuild the native Google Sheet source-of-truth in Drive now">{syncing ? "Syncing…" : "Sync Google Sheet ↑"}</button>}
       </div>
 
       {rows.length === 0 ? <div className="empty"><div className="big">No records for {activeYear}.</div>Generate a number on the Form tab — it appears here instantly.</div> : (
