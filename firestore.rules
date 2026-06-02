@@ -62,12 +62,22 @@ service cloud.firestore {
     }
 
     // --- Document Number Generator ---
-    // docnumbers: any allowlisted user may generate (create as themselves). Records are
-    // effectively immutable; only a reviewer may correct filing metadata or delete.
+    // docnumbers: any allowlisted user may generate (create as themselves). The number itself is
+    // immutable — an allowlisted user may update only filing metadata (the Filing Tracker), which
+    // we enforce by requiring the identifying fields to stay unchanged. A reviewer may do anything
+    // (corrections, delete).
     match /docnumbers/{id} {
       allow read: if isAllowlisted();
       allow create: if isAllowlisted() && request.resource.data.authorEmail == email();
-      allow update, delete: if isReviewer();
+      allow update: if isReviewer() || (
+        isAllowlisted()
+        && request.resource.data.number == resource.data.number
+        && request.resource.data.seq == resource.data.seq
+        && request.resource.data.authorEmail == resource.data.authorEmail
+        && request.resource.data.usdEquivalent == resource.data.usdEquivalent
+        && request.resource.data.approvers == resource.data.approvers
+      );
+      allow delete: if isReviewer();
     }
 
     // docgen_counters: per (year, series) sequence allocator. Allowlisted users increment it
