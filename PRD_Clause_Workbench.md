@@ -1,6 +1,6 @@
 # Product Requirements Document — Clause Library Workbench (Contracting Engine)
 
-**Status:** LIVE (deployed to production; in early team rollout). App v0.6; Playbook v3.1 — all 74 clauses redrafted. Live features include Claude AI assist (OI6) and in-app Save to Drive (OI1). Open: OI4 (allowlist governance), OI5 (addenda linkage across version bumps).
+**Status:** LIVE (deployed to production; in early team rollout). App v0.6; Playbook v3.2 (first post-launch calibration). Live features include Claude AI assist (OI6) and in-app Save to Drive (OI1). All open items OI1–OI6 resolved or process-defined.
 **Live URL:** https://legal-ops-two.vercel.app/
 **Product positioning:** This PRD covers the **Contracting Engine**, the first live module of the
 broader **Legal Operations Workbench**. Three further modules are scaffolded as "To Be Developed":
@@ -8,7 +8,7 @@ Document Number Generator, Compliance Tracker, Budget Tracker.
 **Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not Legal Department position)
 **Classification:** Confidential & Legally Privileged — [Company] internal use only
-**Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.1 (01 Jun 2026)
+**Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.2 (02 Jun 2026)
 **Last updated:** see Change Log (Section 12)
 
 > This PRD is the single controlling record for the Workbench. Every architectural, product, or
@@ -244,6 +244,8 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-01 | v3.1 (shipped to production) | All of the above merged to `main` via PR #27 and **deployed live**. During go-live a Vercel **two-project mismatch** surfaced — the GitHub repo was building one project while the public domain (`legal-ops-two.vercel.app`) served another, so production initially still showed v3.0; resolved by reconciling the connected project / env vars so `main` deploys to the live domain. Production environment variables configured: `ANTHROPIC_API_KEY` (AI assist), `NEXT_PUBLIC_DRIVE_UPLOAD=on` + `NEXT_PUBLIC_DRIVE_FOLDER_ID` (Save to Drive). Net result now live at `https://legal-ops-two.vercel.app/`: correct v3.1 version stamping, clause-aware card tags (CL-05 Model 1–4), Claude AI assist (draft/improve/review/explain), and in-app Save to Drive. Lesson recorded: keep a single Vercel project bound to `main`; retire any duplicate project to avoid stale-deploy confusion. Open items remaining: OI4 (allowlist governance/offboarding) and OI5 (adopted-addenda linkage across a Playbook version bump). | AI eng (deployed by Head of Legal) |
 
 | 2026-06-01 | v3.1 (OI4/OI5 closed) | Closed the last two open items. **OI4 (allowlist governance):** added `/docs/ALLOWLIST_GOVERNANCE.md` defining ownership (Head of Legal), onboarding, offboarding (delete `allowlist/{email}` + disable the Auth user), and a quarterly review cadence; console-managed, no in-app admin screen (would require relaxing the `allowlist` write rule — deferred behind sign-off). **OI5 (addenda linkage across a version bump):** the Master view and exported `.docx` now display each addendum's adopted `playbookVersion` and visibly flag any adopted under an older version than the current `PLAYBOOK_VERSION_TAG`, with a re-confirm step added to the `/playbook/README.md` release checklist — human re-confirmation by design (no automated re-mapping). No new functional risk; lint/build/type-check clean. | AI eng (governance owned by Head of Legal) |
+
+| 2026-06-02 | v3.2 (Playbook) | **First post-launch calibration** — the discipline exercised end-to-end. An adopted addendum (**CL-31 Non-Exclusivity**, an *Improvement* to the Baseline, proposed by Christine Tambunan and approved by the Head of Legal) was folded into the master: the CL-31 Baseline operative text was revised in the master `.docx` (surgical single-`<w:t>`-run edit; all other package parts copied byte-for-byte; saved as `…_v3.2_2026-06-02.docx`, v3.1 retained for audit) **and** in `data/clauses.seed.json` (identical text — seed and master kept in lockstep). Version bumped v3.1 → v3.2 (`PLAYBOOK_VERSION_TAG`, display default, header, source-of-truth line, `playbook/README.md`). After deploy, **"Re-sync from master"** loads the recalibrated CL-31 into the dashboard clause bank, now stamped v3.2; the prior adopted addendum will show as adopted under v3.1 (older) until re-confirmed, per the OI5 flow. Demonstrates the anti-drift loop: propose → adopt (addendum) → human calibration of the master → re-sync. | AI eng (adopted by Head of Legal) |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*

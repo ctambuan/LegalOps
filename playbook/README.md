@@ -1,7 +1,7 @@
 # Master Playbook — canonical source of truth
 
-**Current file:** `00.01_Pluang_Contracting_Playbook_v3.1_2026-06-01.docx` (v3.1 — all 74 clauses redrafted)
-**Prior version:** `00.01_Pluang_Contracting_Playbook_v3.0_08_May_2026.docx` (retained for audit)
+**Current file:** `00.01_Pluang_Contracting_Playbook_v3.2_2026-06-02.docx` (v3.2 — CL-31 Non-Exclusivity baseline recalibrated from an adopted addendum)
+**Prior versions:** `00.01_Pluang_Contracting_Playbook_v3.1_2026-06-01.docx` and `..._v3.0_08_May_2026.docx` (retained for audit)
 **Classification:** Confidential & Legally Privileged — internal use only.
 
 This Word document is the **controlling master** for the clause library and contracting positions
