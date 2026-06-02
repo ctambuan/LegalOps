@@ -116,7 +116,7 @@ function Form({ records, settings, user, showToast }) {
     if (!isPolicy && (!f.department || !f.jira)) return "";
     return buildDocumentNumber(f, 0).replace(/^\d{3}/, "###");
   }, [f, isPolicy]);
-  const approverPreview = businessApprovers({ department: f.department, category: f.category, value: valueBucket }, settings.approvers || {});
+  const approverPreview = businessApprovers({ department: f.department, category: f.category, value: valueBucket, docType: f.docType }, settings.approvers || {});
 
   // Agreements require an explicit Budgeted/Unbudgeted choice; a Budgeted one also needs a value.
   const agreementValueOk = !isAgreement || (
