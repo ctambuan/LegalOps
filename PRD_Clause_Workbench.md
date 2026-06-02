@@ -1,15 +1,15 @@
 # Product Requirements Document — Clause Library Workbench (Contracting Engine)
 
-**Status:** LIVE (deployed to production; in early team rollout). App v0.6; Playbook v3.2 (first post-launch calibration). Live features include Claude AI assist (OI6) and in-app Save to Drive (OI1). All open items OI1–OI6 resolved or process-defined.
+**Status:** LIVE (deployed to production; in team rollout). App v0.8; Playbook v3.2 (first post-launch calibration). **Two modules now live — the Contracting Engine and the Document Number Generator (Section 12).** Live features include Claude AI assist (OI6), in-app Save to Drive (OI1), and a live Google-Sheet source-of-truth mirror for document numbers. All open items OI1–OI6 resolved or process-defined.
 **Live URL:** https://legal-ops-two.vercel.app/
-**Product positioning:** This PRD covers the **Contracting Engine**, the first live module of the
-broader **Legal Operations Workbench**. Three further modules are scaffolded as "To Be Developed":
-Document Number Generator, Compliance Tracker, Budget Tracker.
+**Product positioning:** This PRD covers the **Legal Operations Workbench**. Two modules are live —
+the **Contracting Engine** (Sections 1–11) and the **Document Number Generator** (Section 12). Two
+further modules remain scaffolded as "To Be Developed": Compliance Tracker, Budget Tracker.
 **Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not Legal Department position)
 **Classification:** Confidential & Legally Privileged — [Company] internal use only
 **Source of truth for clauses:** [Company] Legal Contract Review Playbook v3.2 (02 Jun 2026)
-**Last updated:** see Change Log (Section 12)
+**Last updated:** see Change Log (Section 13)
 
 > This PRD is the single controlling record for the Workbench. Every architectural, product, or
 > scope change MUST be reflected here and appended to the Change Log before it is considered adopted.
@@ -114,7 +114,11 @@ Roles are enforced server-side via custom claims and Firestore security rules, N
 ## 7. Architecture (selected; as deployed)
 
 - Product shell: **Legal Operations Workbench** — left-sidebar navigation across four modules
-  (Document Number Generator, Compliance Tracker, **Contracting Engine** [live], Budget Tracker).
+  (**Document Number Generator** [live], Compliance Tracker, **Contracting Engine** [live], Budget Tracker).
+- Document Number Generator (Section 12): a unified form → atomic per-(year, series) sequence
+  (Firestore transaction) → live `docnumbers` register, with a server FX route (`app/api/fxrate`,
+  base USD) for value→USD/annum conversion and a live native-Google-Sheet mirror of the register in
+  the Drive folder (CSV convert-on-import, same `drive.file` scope). Formula + data model in Section 12 / 8.
 - Frontend/Hosting: **Next.js (App Router) deployed on Vercel** (production project; live URL above).
 - Data: **Cloud Firestore (Jakarta, asia-southeast2)**, Firebase project `legalops2026`.
 - Auth: **Firebase Authentication (Google provider)**. Access + reviewer role resolve from the
@@ -159,6 +163,18 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 - `audit/{id}` — append-only: actorEmail, action, targetType, targetId, fromStatus, toStatus, at.
 - `allowlist/{email}` — role: 'contributor' | 'reviewer'. Drives access + claims.
 
+Document Number Generator (Section 12):
+- `docnumbers/{id}` — one generated number per record: date, pic, jira, department, docType, category,
+  title, entity, counterparty, signingMethod; value fields (valueCurrency, valueAmount, valueFrequency,
+  usdEquivalent, budgetStatus, unbudgeted, fxRate, fxDate, valueBucket); approvers; filing
+  (cabinet, folderRow, folderNumber, folderCode); seq, number, series ('STD' | 'POL'), year;
+  authorEmail, authorName, createdAt.
+- `docgen_counters/{year}__{series}` — atomic running sequence (`next`), incremented in a Firestore
+  transaction so concurrent generation never collides; sequence starts at 1 (never 000).
+- `docgen_settings/config` — approver-matrix overrides (per department), default PIC, per-(year,series)
+  sequence starts. Reviewer-writable.
+- `docgen_meta/drive` — Drive mirror pointer: the register Sheet's fileId + last-synced content signature.
+
 ## 9. Security Rules (intent — full rules in /firestore.rules)
 
 - Reads of `clauses`, `proposals`, `adopted`: only if request.auth.token.email in allowlist.
@@ -166,6 +182,10 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 - Status transitions on `proposals` and any write to `adopted`: only reviewer-role (the reviewer (owner)).
 - `audit`: create-only; no update/delete by anyone (immutable).
 - `allowlist`: no client writes; managed via console / admin only.
+- `docnumbers`: read if allowlisted; create if allowlisted (authorEmail == token email); update if
+  reviewer OR allowlisted-for-filing-metadata-only (number/seq/author/usdEquivalent/approvers must stay
+  unchanged); delete reviewer-only. `docgen_counters` + `docgen_meta`: read+write if allowlisted (needed
+  by the generate transaction and the Sheet-sync pointer). `docgen_settings`: read allowlisted, write reviewer-only.
 
 ## 10. Deployment Runbook (summary; full in /DEPLOY.md) — as performed, key-free
 
@@ -224,7 +244,73 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
   setting (zero-retention if required) and that this egress is acceptable alongside OI2/OI3. The feature
   can be disabled entirely by unsetting `ANTHROPIC_API_KEY` or `NEXT_PUBLIC_AI_ASSIST=off`.
 
-## 12. Change Log
+## 12. Module — Document Number Generator (LIVE)
+
+**Purpose.** Replace the manual Excel "2026 Document Number Generator" workbook (formula-driven,
+single-file, siloed across four department sheets) with a governed, multi-user dashboard module that
+generates standardised document numbers, stores every record in a live register, auto-resolves the
+business approver, and tracks physical filing — with a Google Sheet that always mirrors the register
+as a portable source of truth. Replaces four parallel Excel registers with one unified flow + one
+database.
+
+**12.1 Tabs.**
+- **Form & Generate** — input form with a live preview; on Generate it allocates the sequence
+  atomically, builds the number, resolves the approver, stores the record, and shows the result (with
+  Copy) directly beneath the button.
+- **Database** — the live register; navigate by year, filter and sort like a spreadsheet; reviewer can
+  delete; Download CSV. Kept in lockstep with the Drive Sheet.
+- **Filing Tracker** — **Wet-Ink documents only**; any authorised user records the cabinet/row/folder
+  (Folder Code auto-built); the result flows back to the Database and the Sheet.
+- **Settings** — editable approval matrix (per department), default PIC, per-year sequence starts.
+  Reviewer-writable; others read-only.
+
+**12.2 Numbering formula (faithful port of the workbook; verified against its sample rows).**
+- Standard: `{No:000}/{JIRA}/{EntityCode}/{CounterpartyInitials}/{MonthRoman}/{Year}` — e.g.
+  `001/L2231/BSC/SMB/VI/2026`.
+- Policy: `{No:000}-POL-{EntityCode}-{Year}`.
+- `No` — per-(year, series) running sequence, zero-padded to ≥3 digits, **starts at 001** (never 000).
+- `JIRA` — Legal & Compliance rule: with a dash (`CMD-4847` → `C4847`, first letter + digits padded to
+  4); a plain number is kept as-is.
+- `EntityCode` — Pluang entity → code (e.g. PT Bumi Santosa Cemerlang → BSC).
+- `CounterpartyInitials` — first letter of each significant word, **ignoring legal-form identifiers**
+  (PT, CV, Pte Ltd, Tbk, Ltd, Inc, GmbH, Sdn Bhd, Pvt Ltd, …): `PT Tunas Maju Selaras` → `TMS`.
+- `MonthRoman` — Roman month; `Year` — 4-digit.
+- Business Unit is captured on the record (for approver routing + the register) but is **not** printed
+  in the number (segment dropped 2026-06-02 once the database made it redundant).
+
+**12.3 Contract value → USD/annum + approver routing.**
+For Agreements the user records currency (USD, IDR, PHP, SGD, RMB→CNY, EUR, INR, HKD, AUSD→AUD, KRW,
+JPY), an amount (auto thousands separators), and a frequency (Monthly/Annually/One time). The dashboard
+converts to a **USD-per-annum equivalent at today's market rate** via the server route `app/api/fxrate`
+(base USD; one-time fees are tested as-is, not annualised) and stores the USD figure + the rate/date.
+A **required Budgeted / Unbudgeted** choice gates routing. Approver matrix (ported from the workbook
+CONTROL SHEET, overridable in Settings):
+- **Policy** → highest approver (`agreeOver` = "1 C-level AND Claudia/Richard").
+- **Administrative Documents** → the department's admin approver.
+- **Agreements, Unbudgeted** → highest approver, regardless of value.
+- **Agreements, Budgeted** → by USD/annum: ≤ 25,000 → tier-1; 25,000–100,000 → tier-2; ≥ 100,000 → highest.
+
+**12.4 Live Google Sheet source of truth.** Firestore is the realtime store. A background syncer pushes
+the whole register to a **single native Google Sheet** in the Drive folder on any change (generate,
+delete, filing edit, or another session's change) — CSV uploaded with Drive convert-on-import (no
+Sheets API; same `drive.file` scope). Debounced and de-duplicated by a content signature held in
+`docgen_meta` (no redundant writes, no cross-session thrash); uses a **silent cached token only** (no
+surprise consent popups); falls back to in-app **Download CSV** when `NEXT_PUBLIC_DRIVE_UPLOAD` is off.
+
+**12.5 Integrity.** Sequences are allocated in a Firestore transaction per (year, series), so concurrent
+generation never collides. Records are immutable except reviewer corrections/deletes and the
+filing-metadata update path (number/seq/author/value/approvers stay locked at the rules layer). Every
+generate / delete / settings change is written to the append-only `audit` trail.
+
+**12.6 Code.** `lib/docgen.js` (control-sheet data + pure formula logic), `lib/docgenDrive.js` (CSV/Sheet
+build + content signature + Drive create/update), `app/DocGen.js` (UI), `app/api/fxrate/route.js`
+(market FX), data access in `lib/data.js`. Data model in Section 8; rules in Section 9 / `/firestore.rules`.
+
+**FX provider note.** Google publishes no stable public FX API (Google Finance API retired); the route
+uses a free no-key market feed (open.er-api.com, base USD) covering all offered currencies — a one-line
+endpoint swap if a licensed provider (e.g. Bloomberg/Reuters) is later preferred.
+
+## 13. Change Log
 
 | Date (UTC) | Version | Change | By |
 |---|---|---|---|
@@ -263,5 +349,9 @@ the access safety test; add team members; replace the `[Company]` label with the
 
 | 2026-06-02 | v3.2 (live re-sync) | **"Re-sync from master" now always catches the latest.** `app/api/seed` reads `data/clauses.seed.json` **live from the production branch at request time** when `GITHUB_TOKEN` is set (GitHub contents API, raw, no-store), instead of only the seed bundled at the last build — so re-sync reflects every committed calibration immediately, regardless of deploy timing. Fixes a stale-snapshot footgun where a re-sync shortly after a "Calibrate into bank" could have reverted the calibration. Falls back to the bundled seed if the token is unset/fetch fails; the loader toast now reports the source ("latest from master" vs "bundled snapshot"). Clarified that the structured master for re-sync is the seed JSON (kept current by calibration); the Playbook PDF is the rendered archive, not a re-sync source. §7 + env example updated. Lint/build/type-check clean. | AI eng |
 
+| 2026-06-02 | v0.8 (Document Number Generator — build) | **Second Workbench module shipped live** (PR #32). Built the Document Number Generator with Form / Database / Settings tabs, replacing the manual Excel workbook with a governed, multi-user module: faithful port of the workbook formula and the CONTROL SHEET approver matrix (`lib/docgen.js`, verified against the workbook's sample rows); **atomic per-(year, series) sequence** via a Firestore transaction (`docgen_counters`) so concurrent generation can never collide; a live `docnumbers` register (`Database` tab); and a **native Google Sheet in the Drive folder that mirrors the register on every change** (CSV convert-on-import via the existing `drive.file` scope; `lib/docgenDrive.js`). New Firestore collections `docnumbers` / `docgen_counters` / `docgen_settings` / `docgen_meta` with rules (Section 9). The Sheet sync was then made **fully live/automatic** (background, debounced, signature-deduped, silent-token) rather than a manual button. Lint/build clean. | AI eng (for the Head of Legal) |
+| 2026-06-02 | v0.8 (value, filing, FX) | **Value engine + Filing Tracker** (PR #33). (a) Counterparty initials now **ignore legal-form identifiers** (PT, CV, Pte Ltd, Tbk, Ltd, Inc, GmbH, Sdn Bhd, Pvt Ltd, …) so `PT Tunas Maju Selaras` → `TMS`. (b) Contract value entered as **currency + amount (auto separators) + frequency**, converted to a **USD-per-annum equivalent at today's market rate** via new server route `app/api/fxrate` (base USD; one-time fees tested as-is) to route the approver; the USD figure + rate/date are stored and mirrored to the Sheet. (c) New **Filing Tracker** sub-tab shows **Wet-Ink documents only** and lets any authorised user record cabinet/row/folder (Folder Code auto-built); rule relaxed so allowlisted users may update **filing metadata only** (number/seq/author/value/approvers stay immutable). Lint/build clean. | AI eng |
+| 2026-06-02 | v0.8 (routing + refinements) | (a) **Budgeted / Unbudgeted** made a **required** choice on agreements (gates routing: Unbudgeted → highest approver; Budgeted → USD/annum tier). (b) **Policy** documents always route to the highest approver. (c) **Number format simplified**: dropped the Department segment → `{No}/{JIRA}/{Entity}/{CounterpartyInitials}/{Month}/{Year}` (Business Unit still stored for routing/register). (d) **Sequence starts at 001** (never 000). (e) Entity **"Macrodimarc Technology Corporation" → "Flow Exchange Inc." (FLW)**. (f) Generated-number result card moved to **below the Generate button** (visible without scrolling). PRs #34–#35. Deploy note: a merge to `main` did not always auto-trigger a Vercel build — resolved each time with an empty "trigger deploy" commit; keep a single Vercel project bound to `main`. | AI eng (for the Head of Legal) |
+
 ---
-*All subsequent changes append to Section 12 and update the relevant section inline.*
+*All subsequent changes append to Section 13 and update the relevant section inline.*
