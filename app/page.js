@@ -14,10 +14,12 @@ import { exportMaster } from "../lib/exportDocx";
 import { callAssist } from "../lib/assist";
 import { uploadDocxToDrive, uploadToDrive } from "../lib/driveUpload";
 import { generatePlaybookPdf } from "../lib/pdfPlaybook";
+import DocGen from "./DocGen";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
   const [tab, setTab] = useState("library");
+  const [docTab, setDocTab] = useState("form");
   const [clauses, setClauses] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [adopted, setAdopted] = useState([]);
@@ -97,6 +99,21 @@ export default function Page() {
       <span className="dot"></span>{label}{badge ? <span className="badge">{badge}</span> : null}
     </button>
   );
+  const DocSubItem = (key, label) => (
+    <button className={"subitem " + (docTab === key ? "active" : "")} onClick={() => setDocTab(key)}>
+      <span className="dot"></span>{label}
+    </button>
+  );
+
+  const DOCGEN_PAGE = {
+    form: { eyebrow: "Form & Generate", title: "Generate Document Number",
+      sub: "Fill the form and generate a document number with the exact workbook formula. The sequence is allocated automatically and the record is stored to the live register." },
+    database: { eyebrow: "Live register", title: "Document Register",
+      sub: "Every generated number, stored in real time. Navigate by year, filter and sort like a spreadsheet — kept aligned with the Drive source-of-truth file." },
+    settings: { eyebrow: "Approval matrix & defaults", title: "Generator Settings",
+      sub: "Approver names, default PIC and per-year sequence starts used to build every record. Editable by the Head of Legal." },
+  };
+  const dpg = DOCGEN_PAGE[docTab] || DOCGEN_PAGE.form;
 
   return (
     <div className="wrap">
@@ -118,6 +135,13 @@ export default function Page() {
                   {SubItem("contribute", "Propose / Draft")}
                   {isReviewer && SubItem("review", "Review", pending)}
                   {SubItem("master", "Master & Export", adopted.length || 0)}
+                </div>
+              )}
+              {f.key === "docgen" && feature === "docgen" && (
+                <div className="subnav">
+                  {DocSubItem("form", "Form & Generate")}
+                  {DocSubItem("database", "Database")}
+                  {DocSubItem("settings", "Settings")}
                 </div>
               )}
             </div>
@@ -146,6 +170,17 @@ export default function Page() {
                 onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
               {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
               {tab === "master" && <Master adopted={adopted} clauses={clauses} isReviewer={isReviewer} user={user} showToast={showToast} />}
+            </div>
+          </>
+        ) : feature === "docgen" ? (
+          <>
+            <div className="topbar">
+              <div className="kicker">Document Number Generator · {dpg.eyebrow}</div>
+              <h1>{dpg.title}</h1>
+              <div className="sub">{dpg.sub}</div>
+            </div>
+            <div className="content">
+              <DocGen tab={docTab} user={user} isReviewer={isReviewer} showToast={showToast} />
             </div>
           </>
         ) : (

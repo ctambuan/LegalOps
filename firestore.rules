@@ -60,5 +60,33 @@ service cloud.firestore {
       allow create: if isAllowlisted() && request.resource.data.actorEmail == email();
       allow update, delete: if false;
     }
+
+    // --- Document Number Generator ---
+    // docnumbers: any allowlisted user may generate (create as themselves). Records are
+    // effectively immutable; only a reviewer may correct filing metadata or delete.
+    match /docnumbers/{id} {
+      allow read: if isAllowlisted();
+      allow create: if isAllowlisted() && request.resource.data.authorEmail == email();
+      allow update, delete: if isReviewer();
+    }
+
+    // docgen_counters: per (year, series) sequence allocator. Allowlisted users increment it
+    // inside the generate transaction, so they need write here.
+    match /docgen_counters/{id} {
+      allow read: if isAllowlisted();
+      allow write: if isAllowlisted();
+    }
+
+    // docgen_settings: approver matrix + defaults — reviewer writes only, allowlisted read.
+    match /docgen_settings/{id} {
+      allow read: if isAllowlisted();
+      allow write: if isReviewer();
+    }
+
+    // docgen_meta: small pointer doc (Drive mirror file id) — allowlisted read/write.
+    match /docgen_meta/{id} {
+      allow read: if isAllowlisted();
+      allow write: if isAllowlisted();
+    }
   }
 }
