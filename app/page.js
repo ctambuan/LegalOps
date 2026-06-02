@@ -6,12 +6,14 @@ import { useAuth } from "../lib/auth";
 import {
   listenClauses, listenProposals, listenAdopted,
   createProposal, transitionProposal, logExport, seedClausesViaApi,
+  calibrateClauseField, commitCalibrationToRepo,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
 import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID, PLAYBOOK_VERSION_TAG } from "../lib/config";
 import { exportMaster } from "../lib/exportDocx";
 import { callAssist } from "../lib/assist";
-import { uploadDocxToDrive } from "../lib/driveUpload";
+import { uploadDocxToDrive, uploadToDrive } from "../lib/driveUpload";
+import { generatePlaybookPdf } from "../lib/pdfPlaybook";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
@@ -143,7 +145,7 @@ export default function Page() {
               {tab === "contribute" && <Contribute prefill={prefill} clearPrefill={() => setPrefill(null)} user={user}
                 onSubmit={async (item) => { await createProposal(item, user); showToast("Submitted for review"); setTab(isReviewer ? "review" : "library"); }} />}
               {tab === "review" && isReviewer && <Review proposals={proposals} user={user} showToast={showToast} />}
-              {tab === "master" && <Master adopted={adopted} isReviewer={isReviewer} user={user} showToast={showToast} />}
+              {tab === "master" && <Master adopted={adopted} clauses={clauses} isReviewer={isReviewer} user={user} showToast={showToast} />}
             </div>
           </>
         ) : (
@@ -558,10 +560,30 @@ function ReviewCard({ p, open, toggle, act }) {
 }
 
 /* ---------------- Master & Export ---------------- */
-function Master({ adopted, isReviewer, user, showToast }) {
+function Master({ adopted, clauses = [], isReviewer, user, showToast }) {
   const { getDriveAccessToken } = useAuth();
   const [busy, setBusy] = useState(false);
   const [driveBusy, setDriveBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  // Save the full current clause bank as a PDF into the Drive folder (drive.file).
+  const savePdfToDrive = async () => {
+    setPdfBusy(true);
+    try {
+      const { blob, filename } = generatePlaybookPdf(clauses, { companyLabel: COMPANY_LABEL, version: PLAYBOOK_VERSION });
+      let token = await getDriveAccessToken();
+      let file;
+      try {
+        file = await uploadToDrive(blob, filename, "application/pdf", token, DRIVE_FOLDER_ID);
+      } catch (e) {
+        if (e.status === 401) { token = await getDriveAccessToken({ forceRefresh: true }); file = await uploadToDrive(blob, filename, "application/pdf", token, DRIVE_FOLDER_ID); }
+        else { throw e; }
+      }
+      await logExport(user, clauses.length);
+      showToast(`Playbook PDF saved to Drive: ${file.name}`);
+    } catch (e) { console.error(e); showToast(e.message || "PDF save failed — see console"); }
+    setPdfBusy(false);
+  };
   const run = async () => {
     setBusy(true);
     try { await exportMaster(adopted); await logExport(user, adopted.length); showToast("Master .docx generated — place in Drive folder"); }
@@ -598,11 +620,16 @@ function Master({ adopted, isReviewer, user, showToast }) {
         <div className="stat"><div className="n">{new Set(adopted.map((m) => m.title)).size}</div><div className="l">Distinct clauses</div></div>
         <div style={{ marginLeft: "auto", display: "flex", gap: "10px" }}>
           {DRIVE_UPLOAD_ENABLED && (
-            <button className="btn" onClick={saveToDrive} disabled={!adopted.length || driveBusy || busy}
-              title="Upload the master .docx into the Legal Operations Workbench Drive folder">
-              {driveBusy ? "Saving…" : "Save to Drive ↑"}</button>
+            <button className="btn" onClick={savePdfToDrive} disabled={!clauses.length || pdfBusy}
+              title="Render the current clause bank as a PDF and save it into the Drive folder">
+              {pdfBusy ? "Saving PDF…" : "Save Playbook PDF to Drive ↑"}</button>
           )}
-          <button className="btn primary" onClick={run} disabled={!adopted.length || busy}>{busy ? "Generating…" : "Export Master .docx ↓"}</button>
+          {DRIVE_UPLOAD_ENABLED && (
+            <button className="btn" onClick={saveToDrive} disabled={!adopted.length || driveBusy || busy}
+              title="Upload the adopted-addenda master .docx into the Drive folder">
+              {driveBusy ? "Saving…" : "Save addenda .docx ↑"}</button>
+          )}
+          <button className="btn primary" onClick={run} disabled={!adopted.length || busy}>{busy ? "Generating…" : "Export addenda .docx ↓"}</button>
         </div>
       </div>
       {adopted.length === 0 ? <div className="empty"><div className="big">No adopted positions yet.</div>Approved submissions from the Review tab appear here, ready to export.</div> :
@@ -625,6 +652,7 @@ function Master({ adopted, isReviewer, user, showToast }) {
                     {" · "}adopted under {m.playbookVersion || "—"}
                     {stale && <span className="staletag" title={`Adopted under ${m.playbookVersion}; current master is ${PLAYBOOK_VERSION_TAG}`}>older</span>}
                   </div>
+                  {isReviewer && <CalibrateControl m={m} clauses={clauses} user={user} showToast={showToast} />}
                 </div>
                 <span className={"tier " + TIERS[m.tier].c}>{CTYPES[m.type]}</span>
               </div>
@@ -632,5 +660,48 @@ function Master({ adopted, isReviewer, user, showToast }) {
           })}
         </>}
     </>
+  );
+}
+
+// One-click calibration of an adopted addendum into the live clause bank (and, if configured,
+// the repo seed). The reviewer picks which variant slot the approved text fills.
+function CalibrateControl({ m, clauses, user, showToast }) {
+  const FIELDS = [
+    { v: "baseline", l: "Baseline" }, { v: "buyside", l: "Buy-Side" },
+    { v: "sellside", l: "Sell-Side" }, { v: "fallback", l: "Acceptable Fallback" },
+  ];
+  const [field, setField] = useState(m.type === "fallback" ? "fallback" : "baseline");
+  const [busy, setBusy] = useState(false);
+  // Resolve the target clause id from the addendum's reference, else by title.
+  const ref = (m.baseRef || "").match(/CL[-\s]?0*(\d+)/i);
+  let clauseId = ref ? Number(ref[1]) : null;
+  if (!clauseId) clauseId = clauses.find((c) => (c.title || "").toLowerCase() === (m.title || "").toLowerCase())?.id ?? null;
+
+  const apply = async () => {
+    if (!clauseId) { showToast("No matching clause in the bank to calibrate into."); return; }
+    if (!m.text?.trim()) { showToast("This addendum has no operative text."); return; }
+    setBusy(true);
+    try {
+      await calibrateClauseField(clauseId, field, m.text, user);     // live bank (instant)
+      let tail = "";
+      try {
+        const r = await commitCalibrationToRepo({ clauseId, field, text: m.text, title: m.title });
+        tail = r.configured ? (r.committed ? " · committed to repo" : "") : " · repo sync off";
+      } catch (e) { tail = " · repo commit failed"; console.error(e); }
+      showToast(`CL-${clauseId} ${field} updated in clause bank${tail}`);
+    } catch (e) { console.error(e); showToast(e.message || "Calibration failed — reviewer role required"); }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+      <span className="chip" style={{ opacity: .8 }}>{clauseId ? `→ CL-${clauseId}` : "no clause match"}</span>
+      <select value={field} onChange={(e) => setField(e.target.value)} disabled={busy} style={{ padding: "4px 8px", fontSize: "12px" }}>
+        {FIELDS.map((f) => <option key={f.v} value={f.v}>{f.l}</option>)}
+      </select>
+      <button className="btn sm primary" disabled={busy || !clauseId} onClick={apply}
+        title="Write this approved text into the live clause bank (and the repo if configured)">
+        {busy ? "Calibrating…" : "Calibrate into bank"}</button>
+    </div>
   );
 }
