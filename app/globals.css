@@ -256,6 +256,17 @@ select:focus{outline:none;border-color:var(--ink3)}
 .previewbox code{font-family:'IBM Plex Mono',ui-monospace,monospace;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:2px 7px;font-size:12.5px;color:var(--ink);word-break:break-all}
 .previewbox .pl{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin-right:8px}
 
+.valuebox{border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:14px 16px;margin-bottom:16px}
+.valuebox .vbhead{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin-bottom:12px}
+.valuebox .vbhead span{text-transform:none;letter-spacing:0;color:var(--ink3);font-size:11.5px}
+.valuebox .vbgrid{display:grid;grid-template-columns:120px 1fr 150px;gap:12px}
+.valuebox .field{margin-bottom:0}
+.valuebox .ubcheck{display:flex;align-items:center;gap:9px;margin-top:12px;font-size:12.5px;color:var(--ink2);cursor:pointer}
+.valuebox .ubcheck input{width:auto}
+.valuebox .vbresult{margin-top:12px;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 13px}
+.valuebox .vbresult b{font-family:'IBM Plex Mono',ui-monospace,monospace}
+@media(max-width:680px){.valuebox .vbgrid{grid-template-columns:1fr 1fr}}
+
 details.filing{margin-bottom:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:6px 14px}
 details.filing summary{cursor:pointer;font-size:12.5px;color:var(--ink2);padding:6px 0;list-style:none}
 details.filing summary::-webkit-details-marker{display:none}

@@ -110,6 +110,8 @@ export default function Page() {
       sub: "Fill the form and generate a document number with the exact workbook formula. The sequence is allocated automatically and the record is stored to the live register." },
     database: { eyebrow: "Live register", title: "Document Register",
       sub: "Every generated number, stored in real time. Navigate by year, filter and sort like a spreadsheet — kept aligned with the Drive source-of-truth file." },
+    filing: { eyebrow: "Wet-Ink originals", title: "Filing Tracker",
+      sub: "Physical Wet-Ink documents and where they are filed. Record the cabinet, row and folder for each — the Folder Code is generated automatically." },
     settings: { eyebrow: "Approval matrix & defaults", title: "Generator Settings",
       sub: "Approver names, default PIC and per-year sequence starts used to build every record. Editable by the Head of Legal." },
   };
@@ -141,6 +143,7 @@ export default function Page() {
                 <div className="subnav">
                   {DocSubItem("form", "Form & Generate")}
                   {DocSubItem("database", "Database")}
+                  {DocSubItem("filing", "Filing Tracker")}
                   {DocSubItem("settings", "Settings")}
                 </div>
               )}
