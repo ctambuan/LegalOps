@@ -242,6 +242,45 @@ select:focus{outline:none;border-color:var(--ink3)}
 .gate p{color:var(--ink2);font-size:14px;margin-bottom:22px;line-height:1.6}
 .gate code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13px}
 
+/* ---------- Document Number Generator ---------- */
+.resultcard{background:var(--panel);border:1px solid var(--base);border-left:4px solid var(--base);
+  border-radius:11px;padding:18px 22px;margin-bottom:24px}
+.resultcard .rlabel{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--base);margin-bottom:8px}
+.resultcard .rnum{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.resultcard .rnum span{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:21px;font-weight:600;letter-spacing:.02em;color:var(--ink);word-break:break-all}
+.resultcard .rmeta{font-size:12.5px;color:var(--ink2);margin-top:9px}
+.resultcard .rmeta b{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-right:8px}
+
+.previewbox{background:var(--panel2);border:1px dashed var(--line);border-radius:9px;padding:13px 16px;margin:6px 0 16px;font-size:13px;color:var(--ink2)}
+.previewbox code{font-family:'IBM Plex Mono',ui-monospace,monospace;background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:2px 7px;font-size:12.5px;color:var(--ink);word-break:break-all}
+.previewbox .pl{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin-right:8px}
+
+details.filing{margin-bottom:16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:6px 14px}
+details.filing summary{cursor:pointer;font-size:12.5px;color:var(--ink2);padding:6px 0;list-style:none}
+details.filing summary::-webkit-details-marker{display:none}
+details.filing summary:before{content:"▸";margin-right:8px;color:var(--ink3)}
+details.filing[open] summary:before{content:"▾"}
+
+.tablewrap{border:1px solid var(--line);border-radius:11px;overflow:auto;background:var(--panel);max-height:64vh}
+.dtable{width:100%;border-collapse:collapse;font-size:12.5px}
+.dtable th{position:sticky;top:0;background:var(--panel2);text-align:left;padding:11px 12px;font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;z-index:1}
+.dtable th:hover{color:var(--ink)}
+.dtable th.sorted{color:var(--ink)}
+.dtable td{padding:10px 12px;border-bottom:1px solid var(--line2);color:var(--ink2);vertical-align:top}
+.dtable tbody tr:hover{background:var(--panel2)}
+.dtable td.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;color:var(--ink);white-space:nowrap}
+.dtable td.ttl{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.minicopy{border:none;background:none;cursor:pointer;font-size:12px;color:var(--ink3);padding:0 2px;border-radius:4px}
+.minicopy:hover{color:var(--ink)}
+.dtable.appr td{vertical-align:middle}
+.dtable.appr .deptname{font-size:12px;color:var(--ink);white-space:nowrap}
+.apprinput{width:100%;min-width:150px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;
+  font-family:var(--sans);font-size:12px;color:var(--ink);background:var(--panel)}
+.apprinput:focus{outline:none;border-color:var(--ink3)}
+.apprinput:disabled{background:var(--panel2);color:var(--ink2)}
+
 /* ---------- responsive ---------- */
 @media(max-width:860px){
   .wrap{flex-direction:column}
