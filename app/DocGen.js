@@ -166,18 +166,6 @@ function Form({ records, settings, user, showToast }) {
         the live Database{DRIVE_UPLOAD_ENABLED ? " — which keeps a native Google Sheet in Drive updated live" : ""}.
         For agreements, the value is converted to a USD-per-annum equivalent at today&rsquo;s rate to route the approver.</div>
 
-      {result && (
-        <div className="resultcard">
-          <div className="rlabel">Generated Document Number</div>
-          <div className="rnum">
-            <span>{result.number}</span>
-            <button className="copyb" onClick={() => copy(result.number)}>⧉ Copy</button>
-          </div>
-          {result.approvers && <div className="rmeta"><b>Business Approvers</b> {result.approvers}</div>}
-          <div className="rmeta" style={{ color: "var(--ink3)" }}>Stored to the register · sequence {String(result.seq).padStart(3, "0")} · {result.series} {result.year}</div>
-        </div>
-      )}
-
       <div className="two">
         <div className="field"><label>Date of Input</label><input type="date" value={f.date} onChange={set("date")} /></div>
         <div className="field"><label>PIC (initials)</label><input value={f.pic} onChange={set("pic")} placeholder="e.g. CT" /></div>
@@ -262,6 +250,18 @@ function Form({ records, settings, user, showToast }) {
         <button className="btn primary" disabled={!valid || busy} onClick={generate}>{busy ? "Generating…" : "Generate →"}</button>
       </div>
       {!valid && <div className="hint" style={{ textAlign: "right" }}>{isPolicy ? "Date, type, entity and title are required." : "Date, type, entity, JIRA, business unit, counterparty, title and category are required (agreements also need a value)."}</div>}
+
+      {result && (
+        <div className="resultcard" style={{ marginTop: 20, marginBottom: 0 }}>
+          <div className="rlabel">Generated Document Number</div>
+          <div className="rnum">
+            <span>{result.number}</span>
+            <button className="copyb" onClick={() => copy(result.number)}>⧉ Copy</button>
+          </div>
+          {result.approvers && <div className="rmeta"><b>Business Approvers</b> {result.approvers}</div>}
+          <div className="rmeta" style={{ color: "var(--ink3)" }}>Stored to the register · sequence {String(result.seq).padStart(3, "0")} · {result.series} {result.year}</div>
+        </div>
+      )}
     </div>
   );
 }
