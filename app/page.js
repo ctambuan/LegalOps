@@ -677,6 +677,14 @@ function CalibrateControl({ m, clauses, user, showToast }) {
   let clauseId = ref ? Number(ref[1]) : null;
   if (!clauseId) clauseId = clauses.find((c) => (c.title || "").toLowerCase() === (m.title || "").toLowerCase())?.id ?? null;
 
+  // Durable "already calibrated" check: the live clause carries this addendum's text in some
+  // variant slot. Reads the realtime `clauses` prop, so it survives reloads and only shows
+  // calibrated when the bank actually reflects the amendment (a failed calibrate stays active).
+  const clause = clauses.find((c) => String(c.id) === String(clauseId));
+  const want = (m.text || "").trim();
+  const calibrated = !!want && !!clause &&
+    ["baseline", "buyside", "sellside", "fallback"].some((f) => (clause[f] || "").trim() === want);
+
   const apply = async () => {
     if (!clauseId) { showToast("No matching clause in the bank to calibrate into."); return; }
     if (!m.text?.trim()) { showToast("This addendum has no operative text."); return; }
@@ -696,12 +704,19 @@ function CalibrateControl({ m, clauses, user, showToast }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
       <span className="chip" style={{ opacity: .8 }}>{clauseId ? `→ CL-${clauseId}` : "no clause match"}</span>
-      <select value={field} onChange={(e) => setField(e.target.value)} disabled={busy} style={{ padding: "4px 8px", fontSize: "12px" }}>
-        {FIELDS.map((f) => <option key={f.v} value={f.v}>{f.l}</option>)}
-      </select>
-      <button className="btn sm primary" disabled={busy || !clauseId} onClick={apply}
-        title="Write this approved text into the live clause bank (and the repo if configured)">
-        {busy ? "Calibrating…" : "Calibrate into bank"}</button>
+      {calibrated ? (
+        <span className="chip" style={{ background: "var(--forest, #2e5e3a)", color: "#fff", borderColor: "transparent" }}
+          title="This addendum's text is already live in the clause bank">✓ Calibrated</span>
+      ) : (
+        <>
+          <select value={field} onChange={(e) => setField(e.target.value)} disabled={busy} style={{ padding: "4px 8px", fontSize: "12px" }}>
+            {FIELDS.map((f) => <option key={f.v} value={f.v}>{f.l}</option>)}
+          </select>
+          <button className="btn sm primary" disabled={busy || !clauseId} onClick={apply}
+            title="Write this approved text into the live clause bank (and the repo if configured)">
+            {busy ? "Calibrating…" : "Calibrate into bank"}</button>
+        </>
+      )}
     </div>
   );
 }
