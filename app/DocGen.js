@@ -516,7 +516,7 @@ function Settings({ settings, isReviewer, user, showToast }) {
       <div className="two" style={{ maxWidth: 560 }}>
         {["STD", "POL"].map((s) => (
           <div className="field" key={s}><label>{s === "STD" ? "Standard documents" : "Policy documents"}</label>
-            <input type="number" disabled={ro} value={draft.startSeq?.[`${cy}__${s}`] ?? ""} placeholder="0"
+            <input type="number" disabled={ro} value={draft.startSeq?.[`${cy}__${s}`] ?? ""} placeholder="1"
               onChange={(e) => setDraft((d) => ({ ...d, startSeq: { ...(d.startSeq || {}), [`${cy}__${s}`]: e.target.value } }))} /></div>
         ))}
       </div>
