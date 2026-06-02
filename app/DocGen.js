@@ -18,12 +18,12 @@ import { mirrorRegisterToDrive, downloadRegisterCsv, registerSignature } from ".
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtInt = (n) => (n || n === 0 ? Number(n).toLocaleString("en-US") : "");
-// Display string for a record's value (USD).
+// Display string for a record's value (USD), annotated with budget status.
 const fmtValue = (r) => {
-  if (r.unbudgeted) return "Unbudgeted";
-  if (r.usdEquivalent == null) return "";
-  const usd = "USD " + Math.round(r.usdEquivalent).toLocaleString("en-US");
-  return r.valueFrequency === "One time" ? `${usd} (one-time)` : `${usd}/yr`;
+  const base = r.usdEquivalent == null ? ""
+    : "USD " + Math.round(r.usdEquivalent).toLocaleString("en-US") + (r.valueFrequency === "One time" ? " (one-time)" : "/yr");
+  if (r.unbudgeted) return base ? `${base} · Unbudgeted` : "Unbudgeted";
+  return base;
 };
 
 export default function DocGen({ tab, user, isReviewer, showToast }) {
@@ -73,7 +73,7 @@ function Form({ records, settings, user, showToast }) {
   const blank = {
     date: today(), pic: settings.defaultPic || "", jira: "", department: "", docType: "",
     category: "", title: "", entity: "", counterparty: "", signingMethod: "Electronic",
-    valueCurrency: "USD", valueAmount: "", valueFrequency: "Annually", unbudgeted: false,
+    valueCurrency: "USD", valueAmount: "", valueFrequency: "Annually", budgetStatus: "",
   };
   const [f, setF] = useState(blank);
   const [result, setResult] = useState(null);
@@ -102,12 +102,14 @@ function Form({ records, settings, user, showToast }) {
   const isAgreement = f.category === "Agreements or Binding Documents";
 
   // Value → USD-per-annum equivalent (the figure the approval matrix is tested against).
+  const isUnbudgeted = f.budgetStatus === "Unbudgeted";
   const iso = isoFor(f.valueCurrency);
   const usdRaw = rates ? toUsd(f.valueAmount, iso, rates) : null;          // USD of the entered period amount
   const usdForApprover = usdRaw == null ? null : usdRaw * annualFactor(f.valueFrequency); // ×12 if monthly
-  const valueBucket = f.unbudgeted
-    ? "Unbudgeted or outside approved budget"
-    : (isAgreement && usdForApprover != null ? usdValueBucket(usdForApprover) : "");
+  // Approver route depends on budget status: Unbudgeted → highest approver; Budgeted → value tier.
+  const valueBucket = !isAgreement ? ""
+    : isUnbudgeted ? "Unbudgeted or outside approved budget"
+    : (usdForApprover != null ? usdValueBucket(usdForApprover) : "");
 
   const preview = useMemo(() => {
     if (!f.docType || !f.entity) return "";
@@ -116,8 +118,11 @@ function Form({ records, settings, user, showToast }) {
   }, [f, isPolicy]);
   const approverPreview = businessApprovers({ department: f.department, category: f.category, value: valueBucket }, settings.approvers || {});
 
-  const agreementValueOk = !isAgreement || f.unbudgeted ||
-    (f.valueCurrency && Number(f.valueAmount) > 0 && f.valueFrequency && usdForApprover != null);
+  // Agreements require an explicit Budgeted/Unbudgeted choice; a Budgeted one also needs a value.
+  const agreementValueOk = !isAgreement || (
+    f.budgetStatus &&
+    (isUnbudgeted || (f.valueCurrency && Number(f.valueAmount) > 0 && f.valueFrequency && usdForApprover != null))
+  );
   const valid = f.date && f.docType && f.entity && f.title.trim() &&
     (isPolicy || (f.department && f.jira.trim() && f.counterparty.trim() && f.category && agreementValueOk));
 
@@ -137,7 +142,8 @@ function Form({ records, settings, user, showToast }) {
         valueAmount: isAgreement && f.valueAmount ? Number(f.valueAmount) : null,
         valueFrequency: isAgreement ? f.valueFrequency : "",
         usdEquivalent: isAgreement ? (usdForApprover ?? null) : null,
-        unbudgeted: !!(isAgreement && f.unbudgeted),
+        budgetStatus: isAgreement ? f.budgetStatus : "",
+        unbudgeted: !!(isAgreement && isUnbudgeted),
         fxRate: isAgreement && rates ? (rates[iso] ?? null) : null,
         fxDate: isAgreement ? (fxDate || null) : null,
         valueBucket,
@@ -204,29 +210,35 @@ function Form({ records, settings, user, showToast }) {
 
           {isAgreement && (
             <div className="valuebox">
-              <div className="vbhead">Contract Value <span>— converted to USD/annum for the approval route</span></div>
+              <div className="vbhead">Contract Value <span>— budget status and amount route the approver</span></div>
+              <div className="budgetpick">
+                <label className={f.budgetStatus === "Budgeted" ? "on" : ""}>
+                  <input type="radio" name="budget" checked={f.budgetStatus === "Budgeted"} onChange={() => setF((p) => ({ ...p, budgetStatus: "Budgeted" }))} />
+                  Budgeted
+                </label>
+                <label className={f.budgetStatus === "Unbudgeted" ? "on" : ""}>
+                  <input type="radio" name="budget" checked={f.budgetStatus === "Unbudgeted"} onChange={() => setF((p) => ({ ...p, budgetStatus: "Unbudgeted" }))} />
+                  Unbudgeted or outside approved budget
+                </label>
+              </div>
+              {!f.budgetStatus && <div className="hint" style={{ marginTop: 0, marginBottom: 12, color: "var(--esc)" }}>Select Budgeted or Unbudgeted — required.</div>}
               <div className="vbgrid">
                 <div className="field"><label>Currency</label>
-                  <select value={f.valueCurrency} onChange={set("valueCurrency")} disabled={f.unbudgeted}>{CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}</select></div>
+                  <select value={f.valueCurrency} onChange={set("valueCurrency")}>{CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code}</option>)}</select></div>
                 <div className="field"><label>Amount</label>
-                  <input inputMode="numeric" value={fmtInt(f.valueAmount)} disabled={f.unbudgeted}
+                  <input inputMode="numeric" value={fmtInt(f.valueAmount)}
                     onChange={(e) => setF((p) => ({ ...p, valueAmount: e.target.value.replace(/[^\d]/g, "") }))} placeholder="0" /></div>
                 <div className="field"><label>Frequency</label>
-                  <select value={f.valueFrequency} onChange={set("valueFrequency")} disabled={f.unbudgeted}>{FREQUENCIES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+                  <select value={f.valueFrequency} onChange={set("valueFrequency")}>{FREQUENCIES.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
               </div>
-              <label className="ubcheck">
-                <input type="checkbox" checked={f.unbudgeted} onChange={(e) => setF((p) => ({ ...p, unbudgeted: e.target.checked }))} />
-                Unbudgeted or outside approved budget (routes to the highest approver regardless of value)
-              </label>
-              {!f.unbudgeted && (
-                fxError ? <div className="hint" style={{ color: "var(--oxblood)" }}>⚠ {fxError} — value can’t be converted; use the Unbudgeted route or retry later.</div>
+              {fxError ? <div className="hint" style={{ color: "var(--oxblood)" }}>⚠ {fxError} — value can’t be converted; use the Unbudgeted route or retry later.</div>
                 : usdForApprover != null ? (
                   <div className="vbresult">
                     ≈ <b>USD {Math.round(usdForApprover).toLocaleString("en-US")}</b> {f.valueFrequency === "One time" ? "(one-time fee)" : "per annum"}
                     {fxDate && <span className="hint" style={{ display: "inline", marginLeft: 8 }}>· rate as of {fxDate}</span>}
                   </div>
-                ) : <div className="hint">{rates ? "Enter an amount to see the USD equivalent." : "Fetching today’s exchange rates…"}</div>
-              )}
+                ) : <div className="hint">{rates ? "Enter an amount to see the USD equivalent." : "Fetching today’s exchange rates…"}</div>}
+              {isUnbudgeted && <div className="hint">Unbudgeted → routes to the highest approver regardless of value.</div>}
             </div>
           )}
         </>
