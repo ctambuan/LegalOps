@@ -1,66 +1,69 @@
 // app/DocGen.js — Document Number Generator feature (Form · Database · Settings).
-// One unified flow + one Firestore-backed database + one Drive "source of truth" mirror.
+// One unified flow + one Firestore-backed database + one live Google Sheet "source of truth".
 // The numbering rules live in lib/docgen.js (faithfully ported from the workbook).
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
   listenDocNumbers, createDocNumber, listenDocgenSettings, saveDocgenSettings,
-  listenDocgenMeta, setDriveFileId, deleteDocNumber,
+  listenDocgenMeta, setDocgenMeta, deleteDocNumber,
 } from "../lib/data";
 import {
   ENTITIES, DEPARTMENTS, CABINETS, DOC_TYPES, DOC_CATEGORIES, DOC_VALUES,
   SIGNING_METHODS, seriesForType, buildDocumentNumber, businessApprovers, folderCode,
 } from "../lib/docgen";
 import { DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
-import { mirrorRegisterToDrive, downloadRegisterCsv } from "../lib/docgenDrive";
+import { mirrorRegisterToDrive, downloadRegisterCsv, registerSignature } from "../lib/docgenDrive";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function DocGen({ tab, user, isReviewer, showToast }) {
+  const { getDriveAccessToken } = useAuth();
   const [records, setRecords] = useState([]);
   const [settings, setSettings] = useState({});
   const [meta, setMeta] = useState({});
+  const ready = useRef(false); // records have loaded at least once
 
   useEffect(() => {
-    const u1 = listenDocNumbers(setRecords);
+    const u1 = listenDocNumbers((r) => { ready.current = true; setRecords(r); });
     const u2 = listenDocgenSettings(setSettings);
     const u3 = listenDocgenMeta(setMeta);
     return () => { u1(); u2(); u3(); };
   }, []);
 
-  if (tab === "database") return <Database records={records} isReviewer={isReviewer} user={user} showToast={showToast} settings={settings} meta={meta} setMeta={setMeta} />;
-  if (tab === "settings") return <Settings settings={settings} records={records} isReviewer={isReviewer} user={user} showToast={showToast} />;
-  return <Form records={records} settings={settings} meta={meta} setMeta={setMeta} user={user} showToast={showToast} />;
-}
-
-/* ----------------------------- Drive mirror ----------------------------- */
-// Best-effort overwrite of the single register file. Never blocks the generate; surfaces a hint.
-function useDriveMirror({ meta, setMeta, showToast }) {
-  const { getDriveAccessToken } = useAuth();
-  return async (allRecords, { silent = true } = {}) => {
-    if (!DRIVE_UPLOAD_ENABLED) return;
-    try {
-      let token = await getDriveAccessToken();
-      let out;
+  // ---- Live Google Sheet sync (automatic, no button) ----
+  // Whenever the live register changes — a new number, a delete, or a change from ANOTHER user's
+  // session that this snapshot reflects — push the whole register to the single Drive Sheet.
+  // Debounced and de-duplicated by a content signature (shared via docgen_meta) so it never
+  // writes a no-op and concurrent sessions don't thrash. Runs only with a silent (cached) token.
+  const lastSig = useRef(null);
+  const timer = useRef(null);
+  useEffect(() => {
+    if (!DRIVE_UPLOAD_ENABLED || !ready.current || records.length === 0) return;
+    const sig = registerSignature(records);
+    if (sig === lastSig.current || meta.sig === sig) { lastSig.current = sig; return; }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
       try {
-        out = await mirrorRegisterToDrive(allRecords, { accessToken: token, folderId: DRIVE_FOLDER_ID, fileId: meta.fileId });
-      } catch (e) {
-        if (e.status === 401) { token = await getDriveAccessToken({ forceRefresh: true }); out = await mirrorRegisterToDrive(allRecords, { accessToken: token, folderId: DRIVE_FOLDER_ID, fileId: meta.fileId }); }
-        else throw e;
-      }
-      if (out.fileId && out.fileId !== meta.fileId) { await setDriveFileId(out.fileId); setMeta((m) => ({ ...m, fileId: out.fileId })); }
-      if (!silent) showToast(`Google Sheet updated: ${out.file?.name || "saved"}`);
-    } catch (e) {
-      console.error("Drive mirror failed", e);
-      showToast(silent ? "Saved — Drive mirror sync failed (see console)" : (e.message || "Drive sync failed"));
-    }
-  };
+        const token = await getDriveAccessToken({ silent: true });
+        if (!token) return; // no cached grant yet — a sign-in / generate will warm it, then we sync
+        const out = await mirrorRegisterToDrive(records, { accessToken: token, folderId: DRIVE_FOLDER_ID, fileId: meta.fileId });
+        lastSig.current = sig;
+        await setDocgenMeta({ fileId: out.fileId, sig });
+        setMeta((m) => ({ ...m, fileId: out.fileId, sig }));
+      } catch (e) { console.error("live Drive sync failed", e); }
+    }, 1500);
+    return () => timer.current && clearTimeout(timer.current);
+  }, [records, meta.fileId, meta.sig, getDriveAccessToken]);
+
+  if (tab === "database") return <Database records={records} isReviewer={isReviewer} user={user} showToast={showToast} />;
+  if (tab === "settings") return <Settings settings={settings} isReviewer={isReviewer} user={user} showToast={showToast} />;
+  return <Form records={records} settings={settings} user={user} showToast={showToast} />;
 }
 
 /* --------------------------------- Form --------------------------------- */
-function Form({ records, settings, meta, setMeta, user, showToast }) {
-  const mirror = useDriveMirror({ meta, setMeta, showToast });
+function Form({ records, settings, user, showToast }) {
+  const { getDriveAccessToken } = useAuth();
   const blank = {
     date: today(), pic: settings.defaultPic || "", jira: "", department: "", docType: "",
     category: "", value: "", title: "", entity: "", counterparty: "", signingMethod: "Electronic",
@@ -90,13 +93,14 @@ function Form({ records, settings, meta, setMeta, user, showToast }) {
 
   const generate = async () => {
     setBusy(true);
+    // Warm the Drive grant inside this click gesture so the live sync can run silently afterwards
+    // (a popup is only possible here, during a user action — never from the background syncer).
+    if (DRIVE_UPLOAD_ENABLED) getDriveAccessToken().catch(() => {});
     try {
       const rec = { ...f, jira: f.jira.trim(), title: f.title.trim(), counterparty: f.counterparty.trim() };
       const created = await createDocNumber(rec, user, settings);
       setResult(created);
       showToast(`Generated ${created.number}`);
-      // Mirror including the just-created record (the snapshot may lag a beat).
-      mirror([...records, { ...rec, ...created }]);
       setF((p) => ({ ...blank, date: p.date, pic: p.pic, department: p.department, docType: p.docType, entity: p.entity }));
     } catch (e) { console.error(e); showToast(e.message || "Generation failed"); }
     setBusy(false);
@@ -108,8 +112,8 @@ function Form({ records, settings, meta, setMeta, user, showToast }) {
     <div style={{ maxWidth: 820 }}>
       <div className="lockmsg">Fill the form and click <b>Generate</b>. The document number is built with the exact
         workbook formula, the running sequence is allocated automatically (no collisions), and the record is stored to
-        the live Database{DRIVE_UPLOAD_ENABLED ? " and mirrored to a native Google Sheet in Drive" : ""}. Approvers are
-        resolved from the approval matrix in Settings.</div>
+        the live Database{DRIVE_UPLOAD_ENABLED ? " — which keeps a native Google Sheet in Drive updated live" : ""}.
+        Approvers are resolved from the approval matrix in Settings.</div>
 
       {result && (
         <div className="resultcard">
@@ -201,8 +205,7 @@ const COLS = [
   { k: "signingMethod", l: "Signing" }, { k: "folderCode", l: "Folder" },
 ];
 
-function Database({ records, isReviewer, user, showToast, meta, setMeta }) {
-  const mirror = useDriveMirror({ meta, setMeta, showToast });
+function Database({ records, isReviewer, user, showToast }) {
   const years = useMemo(() => {
     const ys = Array.from(new Set(records.map((r) => r.year).filter(Boolean))).sort((a, b) => b - a);
     const cy = new Date().getFullYear();
@@ -213,7 +216,6 @@ function Database({ records, isReviewer, user, showToast, meta, setMeta }) {
   const activeYear = year ?? years[0];
   const [q, setQ] = useState("");
   const [sort, setSort] = useState({ k: "number", dir: "asc" });
-  const [syncing, setSyncing] = useState(false);
 
   const rows = useMemo(() => {
     let r = records.filter((x) => x.year === activeYear);
@@ -231,10 +233,9 @@ function Database({ records, isReviewer, user, showToast, meta, setMeta }) {
 
   const toggleSort = (k) => setSort((s) => (s.k === k ? { k, dir: s.dir === "asc" ? "desc" : "asc" } : { k, dir: "asc" }));
   const copy = (t) => { navigator.clipboard?.writeText(t); showToast("Copied"); };
-  const syncDrive = async () => { setSyncing(true); await mirror(records, { silent: false }); setSyncing(false); };
   const remove = async (r) => {
     if (!confirm(`Delete ${r.number}? This cannot be undone.`)) return;
-    try { await deleteDocNumber(r._id, r.number, user); showToast("Record deleted"); mirror(records.filter((x) => x._id !== r._id)); }
+    try { await deleteDocNumber(r._id, r.number, user); showToast("Record deleted"); }
     catch (e) { showToast(e.message || "Delete failed"); }
   };
 
@@ -247,8 +248,8 @@ function Database({ records, isReviewer, user, showToast, meta, setMeta }) {
           <input placeholder="Filter this year — number, title, counterparty, approver…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <span className="chip">{rows.length} records</span>
+        {DRIVE_UPLOAD_ENABLED && <span className="chip ok" title="A native Google Sheet in the Drive folder updates automatically whenever the register changes">↻ Google Sheet syncs live</span>}
         <button className="btn sm ghost" onClick={() => downloadRegisterCsv(records)} title="Download the whole register as CSV">Download CSV ↓</button>
-        {DRIVE_UPLOAD_ENABLED && <button className="btn sm" onClick={syncDrive} disabled={syncing} title="Rebuild the native Google Sheet source-of-truth in Drive now">{syncing ? "Syncing…" : "Sync Google Sheet ↑"}</button>}
       </div>
 
       {rows.length === 0 ? <div className="empty"><div className="big">No records for {activeYear}.</div>Generate a number on the Form tab — it appears here instantly.</div> : (
@@ -287,7 +288,7 @@ const APPR_FIELDS = [
   { k: "agree100", l: "Agreement 25–100k" }, { k: "agreeOver", l: "≥ 100k / Unbudgeted" },
 ];
 
-function Settings({ settings, records, isReviewer, user, showToast }) {
+function Settings({ settings, isReviewer, user, showToast }) {
   const [draft, setDraft] = useState({ defaultPic: "", approvers: {}, startSeq: {} });
   const [busy, setBusy] = useState(false);
   const loadedRef = useRef(false);
