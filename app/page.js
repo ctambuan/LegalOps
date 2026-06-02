@@ -8,7 +8,7 @@ import {
   createProposal, transitionProposal, logExport, seedClausesViaApi,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
-import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
+import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID, PLAYBOOK_VERSION_TAG } from "../lib/config";
 import { exportMaster } from "../lib/exportDocx";
 import { callAssist } from "../lib/assist";
 import { uploadDocxToDrive } from "../lib/driveUpload";
@@ -606,16 +606,31 @@ function Master({ adopted, isReviewer, user, showToast }) {
         </div>
       </div>
       {adopted.length === 0 ? <div className="empty"><div className="big">No adopted positions yet.</div>Approved submissions from the Review tab appear here, ready to export.</div> :
-        adopted.map((m, i) => (
-          <div key={m._id} className="masterrow">
-            <span className="cnum">{String(i + 1).padStart(2, "0")}</span>
-            <div style={{ flex: 1 }}>
-              <div className="mt">{m.title}</div>
-              <div className="ms">{TIERS[m.tier].l} · {m.classification} · {m.jurisdiction} · by {m.authorName || m.authorEmail}</div>
+        <>
+          {adopted.some((m) => m.playbookVersion && m.playbookVersion !== PLAYBOOK_VERSION_TAG) && (
+            <div className="lockmsg" style={{ marginBottom: "10px" }}>
+              Some addenda below were adopted under an earlier Playbook version than the current
+              <b> {PLAYBOOK_VERSION_TAG}</b> (flagged <span className="staletag">older</span>). When the master is
+              re-calibrated, re-confirm these against the current clause text before relying on them (PRD OI5).
             </div>
-            <span className={"tier " + TIERS[m.tier].c}>{CTYPES[m.type]}</span>
-          </div>
-        ))}
+          )}
+          {adopted.map((m, i) => {
+            const stale = m.playbookVersion && m.playbookVersion !== PLAYBOOK_VERSION_TAG;
+            return (
+              <div key={m._id} className="masterrow">
+                <span className="cnum">{String(i + 1).padStart(2, "0")}</span>
+                <div style={{ flex: 1 }}>
+                  <div className="mt">{m.title}</div>
+                  <div className="ms">{TIERS[m.tier].l} · {m.classification} · {m.jurisdiction} · by {m.authorName || m.authorEmail}
+                    {" · "}adopted under {m.playbookVersion || "—"}
+                    {stale && <span className="staletag" title={`Adopted under ${m.playbookVersion}; current master is ${PLAYBOOK_VERSION_TAG}`}>older</span>}
+                  </div>
+                </div>
+                <span className={"tier " + TIERS[m.tier].c}>{CTYPES[m.type]}</span>
+              </div>
+            );
+          })}
+        </>}
     </>
   );
 }

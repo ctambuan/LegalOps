@@ -33,6 +33,11 @@ these must move together in the same commit, or the app will serve stale or misl
 3. **Update the "Current file" line above** and retain the prior `.docx` for audit.
 4. **Deliver the new `.docx`** to the Head of Legal for upload to the Drive folder (newest dated
    file = current), and record the calibration in the PRD change log (Section 12).
+5. **Re-confirm adopted addenda (PRD OI5).** After the bump, the Master view and the exported `.docx`
+   flag every adopted addendum still stamped with the *previous* version. Review each flagged addendum
+   against the recalibrated clause text and either re-affirm it (re-adopt) or revise it, so no addendum
+   silently drifts from the new master. This is a deliberate human check — there is no automated
+   re-mapping.
 
 ## Why it lives here
 Kept under version control so revisions are precise, reversible, and auditable, and so the exact

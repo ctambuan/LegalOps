@@ -187,14 +187,21 @@ legal-team data. Firebase Auth is global — flagged as an open compliance item 
 - OI3. **Data residency vs Firebase Auth global service.** RESOLVED (2026-06-01): the Head of Legal has
   accepted that Firestore data resides in Jakarta (asia-southeast2) while Firebase Authentication runs as
   a global service. Acceptable for v1.
-- OI4. **Allowlist governance.** Who maintains the allowlist; offboarding process.
-- OI5. **Playbook update process.** PARTIALLY ADDRESSED (2026-06-01): the manual `.docx → seed JSON`
-  re-sync + version-tag bump is now a documented release checklist in `/playbook/README.md`, and the
-  app stamps re-synced clauses and adopted addenda with a single env-overridable `PLAYBOOK_VERSION_TAG`
-  (now `v3.1`) — so "Re-sync from master" reloads the current clause text and labels it correctly (it
-  reloads from the derived seed JSON, by design, not live from Drive). Still open: preserving adopted-
-  addenda linkage across a version bump (each addendum keeps the `playbookVersion` stamp it was adopted
-  under, but there is no automated re-mapping of an addendum onto a re-numbered/redrafted clause).
+- OI4. **Allowlist governance.** RESOLVED (process defined, 2026-06-01): ownership, onboarding,
+  offboarding and a quarterly-review cadence are documented in `/docs/ALLOWLIST_GOVERNANCE.md`. Owner
+  (accountable) is the Head of Legal; the `allowlist` collection is console-managed (client writes
+  blocked at the rules layer). Offboarding = delete the `allowlist/{email}` doc (revokes access at the
+  rules layer) + disable/delete the Firebase Auth user. An in-app admin screen is intentionally not
+  built (would require relaxing the `allowlist` write rule); revisit only with Head-of-Legal sign-off.
+- OI5. **Playbook update process.** RESOLVED (process defined, 2026-06-01): the manual `.docx → seed JSON`
+  re-sync + version-tag bump is a documented release checklist in `/playbook/README.md`, and the app
+  stamps re-synced clauses and adopted addenda with a single env-overridable `PLAYBOOK_VERSION_TAG`
+  (now `v3.1`). For adopted-addenda linkage across a version bump: each addendum stores the
+  `playbookVersion` it was adopted under; the Master view and the exported `.docx` now **display that
+  version** and visibly flag any addendum adopted under an older version than the current master, so a
+  reviewer can re-confirm those entries against the recalibrated clause text after a bump (step added to
+  the release checklist). There is still no *automated* re-mapping of an addendum onto a re-numbered
+  clause — by design it remains a human re-confirmation, consistent with the anti-drift principle.
 - OI6. **Privileged clause text sent to the Claude (Anthropic) API.** ACCEPTED (2026-06-01): the Head of
   Legal has accepted that, when a user invokes the in-app AI assist (draft / improve / review / explain),
   the relevant clause text is sent to Anthropic's Claude API over TLS to generate a **working draft**.
@@ -235,6 +242,8 @@ the access safety test; add team members; replace the `[Company]` label with the
 | 2026-06-01 | v3.1 (Drive export) | In-app **Save to Drive** for the master export (OI1 resolved). The reviewer's Google sign-in now requests the narrow `drive.file` OAuth scope (enabled on the consent screen); the master `.docx` uploads straight into the "Legal Operations Workbench" folder under the reviewer's identity via the Drive REST API — no service-account key (org-policy compliant). New `lib/driveUpload.js`; `lib/auth.js` captures/refreshes the Google OAuth access token and exposes `getDriveAccessToken()`; `lib/firebase.js` adds the scope when enabled; `exportMaster()` now returns `{blob, filename}` so the same artefact can be downloaded or uploaded. Gated by `NEXT_PUBLIC_DRIVE_UPLOAD` (default off) with `NEXT_PUBLIC_DRIVE_FOLDER_ID`. 401s trigger a one-time token refresh + retry. Each save is logged to the audit trail. Lint/build/type-check clean. | AI eng (Drive scope enabled by Head of Legal) |
 
 | 2026-06-01 | v3.1 (shipped to production) | All of the above merged to `main` via PR #27 and **deployed live**. During go-live a Vercel **two-project mismatch** surfaced — the GitHub repo was building one project while the public domain (`legal-ops-two.vercel.app`) served another, so production initially still showed v3.0; resolved by reconciling the connected project / env vars so `main` deploys to the live domain. Production environment variables configured: `ANTHROPIC_API_KEY` (AI assist), `NEXT_PUBLIC_DRIVE_UPLOAD=on` + `NEXT_PUBLIC_DRIVE_FOLDER_ID` (Save to Drive). Net result now live at `https://legal-ops-two.vercel.app/`: correct v3.1 version stamping, clause-aware card tags (CL-05 Model 1–4), Claude AI assist (draft/improve/review/explain), and in-app Save to Drive. Lesson recorded: keep a single Vercel project bound to `main`; retire any duplicate project to avoid stale-deploy confusion. Open items remaining: OI4 (allowlist governance/offboarding) and OI5 (adopted-addenda linkage across a Playbook version bump). | AI eng (deployed by Head of Legal) |
+
+| 2026-06-01 | v3.1 (OI4/OI5 closed) | Closed the last two open items. **OI4 (allowlist governance):** added `/docs/ALLOWLIST_GOVERNANCE.md` defining ownership (Head of Legal), onboarding, offboarding (delete `allowlist/{email}` + disable the Auth user), and a quarterly review cadence; console-managed, no in-app admin screen (would require relaxing the `allowlist` write rule — deferred behind sign-off). **OI5 (addenda linkage across a version bump):** the Master view and exported `.docx` now display each addendum's adopted `playbookVersion` and visibly flag any adopted under an older version than the current `PLAYBOOK_VERSION_TAG`, with a re-confirm step added to the `/playbook/README.md` release checklist — human re-confirmation by design (no automated re-mapping). No new functional risk; lint/build/type-check clean. | AI eng (governance owned by Head of Legal) |
 
 ---
 *All subsequent changes append to Section 12 and update the relevant section inline.*
