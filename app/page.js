@@ -9,7 +9,8 @@ import {
   calibrateClauseField, commitCalibrationToRepo,
 } from "../lib/data";
 import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
-import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID, PLAYBOOK_VERSION_TAG } from "../lib/config";
+import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_MANAGE_ENABLED, DRIVE_FOLDER_ID, PLAYBOOK_VERSION_TAG } from "../lib/config";
+import DriveArchive from "./DriveArchive";
 import { exportMaster } from "../lib/exportDocx";
 import { callAssist } from "../lib/assist";
 import { uploadDocxToDrive, uploadToDrive } from "../lib/driveUpload";
@@ -697,6 +698,7 @@ function Master({ adopted, clauses = [], isReviewer, user, showToast }) {
             );
           })}
         </>}
+      {isReviewer && DRIVE_MANAGE_ENABLED && <DriveArchive showToast={showToast} />}
     </>
   );
 }

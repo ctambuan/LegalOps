@@ -74,3 +74,26 @@ either upload manually, or (future) wire the Drive API with a write-scoped crede
 NOTE (2026-06-01): the Drive connector now authenticates and can write to the configured project folder
 (the PRD and project records were written via it). Confirm whether the in-app export should use the same
 credential/scope, and whether the target is a Shared Drive (different write permissions) or a normal folder.
+
+## 10. In-app Drive archiving of superseded documents (broad `drive` scope)
+The reviewer can move a superseded file out of the Workbench folder into its **Archived** subfolder
+from inside the app (Contracting Engine → **Master & Export**, at the foot of the page). This is OFF
+by default and is a deliberate scope escalation:
+
+- **Why it needs more than `drive.file`:** Save-to-Drive only touches files the app itself created,
+  so `drive.file` suffices. Archiving has to *see and relocate files the app did not create* (e.g. the
+  PRD, an old master, a manual upload), which `drive.file` cannot do. The reviewer's Google sign-in
+  therefore requests the broad `https://www.googleapis.com/auth/drive` scope when this feature is on.
+- **Enable it:**
+  1. Google Cloud console → APIs & Services → **OAuth consent screen** → add the scope
+     `https://www.googleapis.com/auth/drive` (in addition to / replacing `drive.file`). This is a
+     sensitive scope; if the consent screen is in "Production" you may face Google verification unless
+     all users are inside your Workspace org (internal app).
+  2. Vercel env: set `NEXT_PUBLIC_DRIVE_MANAGE=on`. Optionally set
+     `NEXT_PUBLIC_DRIVE_ARCHIVE_FOLDER_ID` (defaults to the existing **Archived** subfolder
+     `1kRaTNcs0wMnseEo7XKfXYZmbThMcoVG-`; if blank the app finds/creates an `Archived` folder at runtime).
+  3. Reviewers must **sign out and back in once** to grant the broader scope.
+- **Safety:** archiving is a *move, not a delete* — the file stays in Drive (in Archived) and is fully
+  restorable. The control is reviewer-only and every action runs under the signed-in reviewer's identity.
+- **Turn it off:** set `NEXT_PUBLIC_DRIVE_MANAGE=off`; the app falls back to the narrow `drive.file`
+  scope and the archive panel disappears.
