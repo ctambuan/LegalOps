@@ -16,11 +16,13 @@ import { callAssist } from "../lib/assist";
 import { uploadDocxToDrive, uploadToDrive } from "../lib/driveUpload";
 import { generatePlaybookPdf } from "../lib/pdfPlaybook";
 import DocGen from "./DocGen";
+import TaskTracker from "./TaskTracker";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
   const [tab, setTab] = useState("library");
   const [docTab, setDocTab] = useState("form");
+  const [ttTab, setTtTab] = useState("dashboard");
   const [clauses, setClauses] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [adopted, setAdopted] = useState([]);
@@ -106,6 +108,11 @@ export default function Page() {
       <span className="dot"></span>{label}
     </button>
   );
+  const TtSubItem = (key, label) => (
+    <button className={"subitem " + (ttTab === key ? "active" : "")} onClick={() => setTtTab(key)}>
+      <span className="dot"></span>{label}
+    </button>
+  );
 
   const DOCGEN_PAGE = {
     form: { eyebrow: "Form & Generate", title: "Generate Document Number",
@@ -118,6 +125,14 @@ export default function Page() {
       sub: "Approver names, default PIC and per-year sequence starts used to build every record. Editable by the Head of Legal." },
   };
   const dpg = DOCGEN_PAGE[docTab] || DOCGEN_PAGE.form;
+
+  const TT_PAGE = {
+    dashboard: { eyebrow: "Legal Service Request Management", title: "Legal Service Request Management",
+      sub: "Log the matters you handled this reporting period, then have Claude draft a uniform, house-style weekly report for your review and submission. The live JIRA LSRM pull arrives in a later phase." },
+    report: { eyebrow: "Submitted & draft reports", title: "Weekly Report",
+      sub: "The store of weekly reports. Authors see their own; the Head of Legal sees the team and can assemble the combined report. Every report stays editable and re-savable, with each change audited." },
+  };
+  const tpg = TT_PAGE[ttTab] || TT_PAGE.dashboard;
 
   return (
     <div className="wrap">
@@ -147,6 +162,12 @@ export default function Page() {
                   {DocSubItem("database", "Database")}
                   {DocSubItem("filing", "Filing Tracker")}
                   {DocSubItem("settings", "Settings")}
+                </div>
+              )}
+              {f.key === "tasktracker" && feature === "tasktracker" && (
+                <div className="subnav">
+                  {TtSubItem("dashboard", "Legal Service Request Management")}
+                  {TtSubItem("report", "Weekly Report")}
                 </div>
               )}
             </div>
@@ -186,6 +207,17 @@ export default function Page() {
             </div>
             <div className="content">
               <DocGen tab={docTab} user={user} isReviewer={isReviewer} showToast={showToast} />
+            </div>
+          </>
+        ) : feature === "tasktracker" ? (
+          <>
+            <div className="topbar">
+              <div className="kicker">Task Tracker and Report · {tpg.eyebrow}</div>
+              <h1>{tpg.title}</h1>
+              <div className="sub">{tpg.sub}</div>
+            </div>
+            <div className="content">
+              <TaskTracker tab={ttTab} user={user} isReviewer={isReviewer} showToast={showToast} />
             </div>
           </>
         ) : (
