@@ -98,5 +98,38 @@ service cloud.firestore {
       allow read: if isAllowlisted();
       allow write: if isAllowlisted();
     }
+
+    // --- Task Tracker and Report ---
+    // report_settings: roster + matter-group overrides — reviewer writes only, allowlisted read.
+    match /report_settings/{id} {
+      allow read: if isAllowlisted();
+      allow write: if isReviewer();
+    }
+
+    // report_matters: each allowlisted user logs their own matters (create/update/delete as
+    // themselves and they keep ownership); a reviewer may read and manage all (whole-team view).
+    match /report_matters/{id} {
+      allow read: if isReviewer() || (isAllowlisted() && resource.data.authorEmail == email());
+      allow create: if isAllowlisted() && request.resource.data.authorEmail == email();
+      allow update: if isReviewer() || (
+        isAllowlisted()
+        && resource.data.authorEmail == email()
+        && request.resource.data.authorEmail == resource.data.authorEmail
+      );
+      allow delete: if isReviewer() || (isAllowlisted() && resource.data.authorEmail == email());
+    }
+
+    // weekly_reports: same author-or-reviewer visibility. The author owns their personal draft;
+    // a reviewer may read all and assemble/curate the combined report.
+    match /weekly_reports/{id} {
+      allow read: if isReviewer() || (isAllowlisted() && resource.data.authorEmail == email());
+      allow create: if isAllowlisted() && request.resource.data.authorEmail == email();
+      allow update: if isReviewer() || (
+        isAllowlisted()
+        && resource.data.authorEmail == email()
+        && request.resource.data.authorEmail == resource.data.authorEmail
+      );
+      allow delete: if isReviewer() || (isAllowlisted() && resource.data.authorEmail == email());
+    }
   }
 }
