@@ -92,6 +92,7 @@ export default function Page() {
     { key: "compliance", label: "Compliance Tracker" },
     { key: "contracting", label: "Contracting Engine" },
     { key: "budget", label: "Budget Tracker" },
+    { key: "tasktracker", label: "Task Tracker and Report" },
   ];
   const activeFeature = FEATURES.find((f) => f.key === feature) || FEATURES[2];
 
