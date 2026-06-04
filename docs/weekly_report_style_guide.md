@@ -14,9 +14,15 @@
 
 ## 1. Document architecture
 
-The report is **one document per reporting period for the whole Legal team** (a combined
-report), not one per person. Matters are ranked by *management attention required*, from
-most to least, into six fixed sections:
+**Production model (two stages).** Each team member first generates their **own draft**
+of the matters they handled during the period, with each matter classified into the
+sections below. The Head of Legal then **assembles and curates** those per-person drafts
+into a **single combined report for the period** — the canonical document that goes to
+management. The combined report, not the individual drafts, is what the sample templates
+represent.
+
+Within both the per-person draft and the combined report, matters are ranked by
+*management attention required*, from most to least, into six fixed sections:
 
 | # | Section | What belongs here |
 |---|---------|-------------------|
@@ -150,6 +156,15 @@ The AI's task when generating a report is to, for each matter:
 5. Preserve every figure, date, citation, and party name from the input exactly; flag,
    never invent, anything missing.
 
-The output is a **working draft** for the drafter and the Head of Legal to review, edit,
-and submit. It is not a final Legal Department position until reviewed by qualified
-counsel.
+This runs in **two stages**:
+- **Stage 1 — per person.** Each team member's matters (JIRA-sourced + manual) are
+  drafted and classified into Sections A–F, producing that person's draft for the period.
+  The drafter reviews and edits before contributing.
+- **Stage 2 — combined.** The Head of Legal assembles the per-person drafts into one
+  combined report: matters are merged under the shared A–F sections, ordered by
+  management attention, de-duplicated where two people touched the same ticket, and
+  curated into the final management-facing document.
+
+The output of both stages is a **working draft** for the drafter and the Head of Legal to
+review, edit, and submit. It is not a final Legal Department position until reviewed by
+qualified counsel.
