@@ -30,6 +30,14 @@ firebase login
 firebase use --add                     # select your project
 firebase deploy --only firestore       # deploys firestore.rules + indexes
 ```
+> **Re-run this whenever `firestore.rules` changes.** Pushing app code does **not** deploy
+> rules — they ship on their own. After pulling a release that touches `firestore.rules`
+> (e.g. the **Task Tracker and Report** module, which adds the `report_settings`,
+> `report_matters` and `weekly_reports` collections), redeploy:
+> ```bash
+> firebase deploy --only firestore:rules
+> ```
+> Until you do, the new collections are denied and the feature's reads/writes will fail.
 
 ## 4. First reviewer + allowlist (no service account required)
 Many Google Workspace orgs block service-account key creation. None is needed: the Firestore **console**
@@ -97,3 +105,26 @@ by default and is a deliberate scope escalation:
   restorable. The control is reviewer-only and every action runs under the signed-in reviewer's identity.
 - **Turn it off:** set `NEXT_PUBLIC_DRIVE_MANAGE=off`; the app falls back to the narrow `drive.file`
   scope and the archive panel disappears.
+
+## 11. Task Tracker and Report module
+The **Task Tracker and Report** tab (Legal Service Request Management dashboard + Weekly Report)
+lets the team log matters per reporting period and have Claude draft a uniform, house-style weekly
+report (see `docs/weekly_report_style_guide.md`). To bring it live after deploying the app code:
+
+1. **Deploy the Firestore rules** (the one step a code deploy does **not** cover):
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+   This authorises the three new collections — `report_settings`, `report_matters`,
+   `weekly_reports` — each enforcing *author owns their own; reviewer (Head of Legal) sees and
+   manages all*. Without it the dashboard renders but every add/generate/save is denied.
+2. **AI generation key:** report drafting calls Claude server-side via `app/api/report/route.js`,
+   which reuses the existing `ANTHROPIC_API_KEY` (the same var the Contracting Engine assistant
+   uses). If that is already set, generation works immediately; otherwise set it in Vercel env.
+   The key is server-only — never `NEXT_PUBLIC`, never in the browser bundle.
+3. **Roster & matter groups** seed from defaults (`lib/reportConfig.js`), so the form is usable on
+   day one. The Head of Legal can edit both in-app via the reviewer-only **Manage lists** panel on
+   the dashboard (persisted to `report_settings`), with no code change.
+4. **Phase 2 (not yet built):** the live JIRA LSRM pull (per-user OAuth) will auto-populate
+   "My matters"; for now matters are entered manually.
+
