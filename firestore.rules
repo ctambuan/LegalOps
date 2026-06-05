@@ -18,10 +18,37 @@ service cloud.firestore {
       );
     }
 
-    // --- allowlist: managed by admin/console only; readable by the owning user to resolve own role ---
+    // --- allowlist: the workbench access list + per-user role (Team & Access / User Management) ---
+    // Reviewer (Head of Legal) manages it from the app; no Admin SDK (org policy blocks SA keys), so
+    // access control is enforced here. The owning user may read their own doc (to resolve role) and
+    // stamp their own sign-in metadata (never their role/email). Approved email domains are pinned
+    // here as the security boundary — adding a domain means editing this rule (and NEXT_PUBLIC_ALLOWED_USER_DOMAINS).
+    function approvedDomain(e) {
+      return e.matches('^[^@]+@(pluang[.]com|batubara-id[.]com)$');
+    }
     match /allowlist/{e} {
-      allow read: if isSignedIn() && e == email();
-      allow write: if false; // console / admin SDK only
+      allow read: if (isSignedIn() && e == email()) || isReviewer();
+
+      // Add a user: reviewer only; doc id must equal the (lowercased) email on an approved domain.
+      allow create: if isReviewer()
+        && request.resource.data.email == e
+        && approvedDomain(e)
+        && request.resource.data.role in ['contributor', 'reviewer'];
+
+      // Reviewer edits (role change, resend bookkeeping): email immutable; a reviewer may NOT change
+      // their OWN role (no self-demote / lockout).
+      allow update: if isReviewer()
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role in ['contributor', 'reviewer']
+        && (e != email() || request.resource.data.role == resource.data.role);
+
+      // Self sign-in stamp: the owning user may update only sign-in metadata, never role or email.
+      allow update: if isSignedIn() && e == email()
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.email == resource.data.email;
+
+      // Off-board: reviewer only, and never your own account (no self-lockout).
+      allow delete: if isReviewer() && e != email();
     }
 
     // --- clauses (seed reference): read-only to allowlisted users; never client-writable ---

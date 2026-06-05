@@ -232,10 +232,12 @@ Firestore rules let them in because their email is on the `allowlist`.
 2. The email is validated against the **approved-domain allowlist**
    (`ALLOWED_USER_DOMAINS = pluang.com, batubara-id.com`). Off-domain emails are rejected with a clear
    message — protecting privileged legal data from typos and outside addresses.
-3. On save, a server route (`/api/users`, Admin-SDK-backed, reviewer-gated via verified ID token —
-   mirroring `/api/seed`, `/api/calibrate`) writes the `allowlist/{emailLower}` doc with
-   `status:"invited"`, sets the role (and, for reviewers, the `reviewer` custom claim, which only the
-   Admin SDK can set), and **sends an automated invite email** containing the workbench sign-in link.
+3. On save, the reviewer's **own client session writes** the `allowlist/{emailLower}` doc with
+   `status:"invited"` and the role, **governed by Firestore rules** (see Section 14). *(Implementation
+   note: this project deliberately has no Admin SDK — `lib/verifyIdToken.js` documents that org policy
+   blocks service-account keys — so there is no `/api/users` route and no custom claims. The role lives
+   in the allowlist doc, which the app already honours, and the rules are the security boundary.)* An
+   **invite email** is then sent (next paragraph).
 
    **Invite delivery (zero-cost):** the route sends the invite **as the signed-in admin via the Gmail
    API** (`gmail.send` scope added to the existing Google OAuth — the same auth already used for sign-in
@@ -261,9 +263,10 @@ token expiry.
 
 ## 14. Firestore Rules (additions)
 
-Live company data mirrors `docgen_settings` (reviewer write, allowlisted read). The **`allowlist` stays
-client-unwritable** (`allow write: if false`) — all user management goes through the Admin-SDK server
-route, so privilege escalation (esp. setting `reviewer`) can never originate from the client.
+Live company data mirrors `docgen_settings` (reviewer write, allowlisted read). For the **`allowlist`**,
+since there is no Admin SDK, the **rules themselves are the boundary**: reviewer-only create/update/delete
+with an approved-domain check and no self-demote / self-delete; the owning user may read their own doc and
+stamp only their sign-in metadata. (Implemented as shipped — see `firestore.rules`.)
 
 ```
 match /cfg_entities/{id}  { allow read: if isAllowlisted(); allow write: if isReviewer();
@@ -336,6 +339,16 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.3 — **Phase 1 / User Management BUILT**) — Implemented Team & Access end-to-end:
+  `lib/config.js` (domains, app URL, invite flag), `lib/firebase.js` (`gmail.send` scope), `firestore.rules`
+  (allowlist governance), `lib/data.js` (`listenAllowlist` / `addAllowlistUser` / `updateAllowlistRole` /
+  `removeAllowlistUser` / `stampSignIn`), `lib/auth.js` (sign-in stamping + Google-token alias), `lib/invite.js`
+  (email build + Gmail send), `app/CompanyData.js` (module + Team & Access UI), `app/page.js` (nav/subnav/route).
+  **Architectural correction:** no Admin SDK exists in this project (org policy blocks SA keys), so user
+  management is reviewer-gated **client writes governed by rules**, not an `/api/users` route; roles live in
+  the allowlist doc (no custom claims). Build passes. Other Company Data areas remain scaffolded.
+  Operator steps to finish: deploy `firestore.rules`; to turn on auto-email set `NEXT_PUBLIC_USER_INVITE_EMAIL=on`
+  after enabling the `gmail.send` scope on the OAuth consent screen (until then a copy-link fallback is shown).
 - 2026-06-05 (v2.2) — Resolved OI6 (`ALLOWED_USER_DOMAINS = pluang.com, batubara-id.com`) and OI7 (invite
   sent **as the signed-in admin via the Gmail API**, `gmail.send` scope — zero cost). Added the invite
   email template (Appendix A). Status: PROPOSED.

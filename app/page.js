@@ -17,12 +17,14 @@ import { uploadDocxToDrive, uploadToDrive } from "../lib/driveUpload";
 import { generatePlaybookPdf } from "../lib/pdfPlaybook";
 import DocGen from "./DocGen";
 import TaskTracker from "./TaskTracker";
+import CompanyData from "./CompanyData";
 
 export default function Page() {
   const { user, role, loading, ready, isReviewer, isAllowed, login, logout } = useAuth();
   const [tab, setTab] = useState("library");
   const [docTab, setDocTab] = useState("form");
   const [ttTab, setTtTab] = useState("dashboard");
+  const [coTab, setCoTab] = useState("team");
   const [clauses, setClauses] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [adopted, setAdopted] = useState([]);
@@ -95,6 +97,7 @@ export default function Page() {
     { key: "contracting", label: "Contracting Engine" },
     { key: "budget", label: "Budget Tracker" },
     { key: "tasktracker", label: "Task Tracker and Report" },
+    { key: "company", label: "Company Data" },
   ];
   const activeFeature = FEATURES.find((f) => f.key === feature) || FEATURES[2];
 
@@ -110,6 +113,11 @@ export default function Page() {
   );
   const TtSubItem = (key, label) => (
     <button className={"subitem " + (ttTab === key ? "active" : "")} onClick={() => setTtTab(key)}>
+      <span className="dot"></span>{label}
+    </button>
+  );
+  const CoSubItem = (key, label) => (
+    <button className={"subitem " + (coTab === key ? "active" : "")} onClick={() => setCoTab(key)}>
       <span className="dot"></span>{label}
     </button>
   );
@@ -133,6 +141,20 @@ export default function Page() {
       sub: "The store of weekly reports. Authors see their own; the Head of Legal sees the team and can assemble the combined report. Every report stays editable and re-savable, with each change audited." },
   };
   const tpg = TT_PAGE[ttTab] || TT_PAGE.dashboard;
+
+  const COMPANY_PAGE = {
+    team: { eyebrow: "User access", title: "Team & Access",
+      sub: "Add team members by email and set their role. They are authorised immediately and sign in with their existing Google account — there is no account to create, only an invitation to send." },
+    entities: { eyebrow: "Corporate records", title: "Entities",
+      sub: "Entities with their directors, lines of business and authorized signers — the spine every tool reads from. Editable here in a later step of Phase 1." },
+    approval: { eyebrow: "Governance rules", title: "Approval Policy",
+      sub: "Approval thresholds and per-department routing. Editing replaces the hardcoded matrix the Document Number Generator uses today." },
+    ai: { eyebrow: "Agents & knowledge", title: "AI & Knowledge",
+      sub: "Agents (templated instructions + a test sandbox) and the Policy Library that agents retrieve from. Phases 2–3." },
+    changes: { eyebrow: "Maker-checker", title: "Change Requests",
+      sub: "Proposed edits to company data, awaiting Head-of-Legal approval, shown as a side-by-side diff." },
+  };
+  const cpg = COMPANY_PAGE[coTab] || COMPANY_PAGE.team;
 
   return (
     <div className="wrap">
@@ -168,6 +190,15 @@ export default function Page() {
                 <div className="subnav">
                   {TtSubItem("dashboard", "Legal Service Request Management")}
                   {TtSubItem("report", "Weekly Report")}
+                </div>
+              )}
+              {f.key === "company" && feature === "company" && (
+                <div className="subnav">
+                  {CoSubItem("team", "Team & Access")}
+                  {CoSubItem("entities", "Entities (Records)")}
+                  {CoSubItem("approval", "Approval Policy")}
+                  {CoSubItem("ai", "AI & Knowledge")}
+                  {isReviewer && CoSubItem("changes", "Change Requests")}
                 </div>
               )}
             </div>
@@ -218,6 +249,17 @@ export default function Page() {
             </div>
             <div className="content">
               <TaskTracker tab={ttTab} user={user} isReviewer={isReviewer} showToast={showToast} />
+            </div>
+          </>
+        ) : feature === "company" ? (
+          <>
+            <div className="topbar">
+              <div className="kicker">Company Data · {cpg.eyebrow}</div>
+              <h1>{cpg.title}</h1>
+              <div className="sub">{cpg.sub}</div>
+            </div>
+            <div className="content">
+              <CompanyData tab={coTab} user={user} isReviewer={isReviewer} showToast={showToast} />
             </div>
           </>
         ) : (
