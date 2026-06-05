@@ -1,6 +1,6 @@
 # Product Requirements Document — Company Data Module (formerly "Settings")
 
-**Status:** PROPOSED — v2.1 (design-reviewed). Adds **User Management (Team & Access)** to the v2 design. Not yet built.
+**Status:** PROPOSED — v2.2 (design-reviewed). User Management decisions resolved (approved domains + zero-cost Gmail invite); invite email drafted (Appendix A). Not yet built.
 **Product positioning:** A new top-level module for the **Legal Operations Workbench** — a centralised, governed **Company Data** layer (the source of truth) that every other tool reads from, plus the access-control surface for the whole workbench. Sibling to the live **Contracting Engine** and **Document Number Generator** (see `PRD_Clause_Workbench.md`).
 **Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not a Legal Department position)
@@ -229,13 +229,19 @@ Firestore rules let them in because their email is on the `allowlist`.
 **Add-user journey (decisions: auto-invite + domain-restricted):**
 1. Admin opens **Team & Access → `+ Add user`**, enters an email and picks a role
    (Contributor / Reviewer).
-2. The email is validated against the **approved-domain allowlist** (`ALLOWED_USER_DOMAINS`, configurable;
-   see OI6). Off-domain emails are rejected with a clear message — protecting privileged legal data from
-   typos and outside addresses.
+2. The email is validated against the **approved-domain allowlist**
+   (`ALLOWED_USER_DOMAINS = pluang.com, batubara-id.com`). Off-domain emails are rejected with a clear
+   message — protecting privileged legal data from typos and outside addresses.
 3. On save, a server route (`/api/users`, Admin-SDK-backed, reviewer-gated via verified ID token —
    mirroring `/api/seed`, `/api/calibrate`) writes the `allowlist/{emailLower}` doc with
    `status:"invited"`, sets the role (and, for reviewers, the `reviewer` custom claim, which only the
    Admin SDK can set), and **sends an automated invite email** containing the workbench sign-in link.
+
+   **Invite delivery (zero-cost):** the route sends the invite **as the signed-in admin via the Gmail
+   API** (`gmail.send` scope added to the existing Google OAuth — the same auth already used for sign-in
+   and `drive.file`). No third-party email service, no extra cost; the invitee receives it from the
+   admin's own address, so replies/queries reach the right person. A Gmail App-Password + SMTP route is a
+   viable fallback. Wording in Appendix A.
 4. The list shows the user as **Invited**. On their first Google sign-in the row flips to **Active**
    (`firstSignInAt`/`lastSignInAt` recorded). No manual registration step on the admin's side.
 
@@ -320,16 +326,19 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 - OI3. **Policy storage** — Drive (`drive.file`) vs Firebase Storage; decide at Phase 3.
 - OI4. **Workbook importer** for Directors / LoB / current approvers, vs manual entry.
 - OI5. **Impact-preview depth** — exact vs approximate re-routing counts over historical `docnumbers`.
-- OI6. **Approved user domains** — confirm the exact domain allowlist for `ALLOWED_USER_DOMAINS` (e.g.
-  `pluang.com`, `batubara-id.com`). Needed before User Management ships.
-- OI7. **Production email mechanism for invites** — the deployed app needs a server-side sender (e.g.
-  Gmail API via service account / OAuth, or a transactional provider such as Resend/SendGrid). Decide and
-  configure the credential; the invite template wording to be approved by the Head of Legal.
+- OI6. **Approved user domains** — RESOLVED (2026-06-05): `ALLOWED_USER_DOMAINS = pluang.com,
+  batubara-id.com`. Enforced server-side in `/api/users`.
+- OI7. **Invite email mechanism** — RESOLVED (2026-06-05): send **as the signed-in admin via the Gmail
+  API** (`gmail.send` scope on the existing Google OAuth) — zero cost, no third-party service. App-Password
+  + SMTP is the fallback. Draft wording in Appendix A (subject to final Head-of-Legal approval).
 - OI8. **Off-domain exceptions** (external counsel/contractors) — if ever needed, define an explicit
   per-user override path, since the default policy is domain-restricted.
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.2) — Resolved OI6 (`ALLOWED_USER_DOMAINS = pluang.com, batubara-id.com`) and OI7 (invite
+  sent **as the signed-in admin via the Gmail API**, `gmail.send` scope — zero cost). Added the invite
+  email template (Appendix A). Status: PROPOSED.
 - 2026-06-05 (v2.1) — Added **User Management (Team & Access)**: admin adds users by email
   (owner decisions: **auto-invite email** + **restrict to approved company domains**); honest "pre-authorize
   + invite, not Google-account creation" model; Admin-SDK `/api/users` route keeps `allowlist` client-
@@ -340,3 +349,47 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
   extraction-preview gate + answer provenance; templated agents + test sandbox; dirty-state guard, visible
   history/revert, empty states, global search, multi-currency framing. Renamed "Settings" → "Company Data".
 - 2026-06-05 (v1) — Initial spec. Five flat domains; Head-of-Legal-only writes. Superseded by v2.
+
+---
+
+## Appendix A — Invite email template
+
+Sent automatically when an admin adds a user. Merge fields in `{{double braces}}` are filled by
+`/api/users`. Sent from the admin's own Gmail address (so replies reach them).
+
+**Subject:** You've been granted access to the [Company] Legal Operations Workbench
+
+**Body (plain text):**
+```
+Hi {{inviteeName}},
+
+{{inviterName}} has granted you access to the [Company] Legal Operations Workbench — the Legal
+Department's internal tool for the clause library, document numbering, approvals and corporate records.
+
+To get in:
+  1. Open {{appUrl}}
+  2. Click "Sign in with Google"
+  3. Sign in with this exact account: {{inviteeEmail}}
+
+Your access level: {{role}}.
+
+Please note: access is restricted to authorised accounts, so you must sign in with the Google account
+above ({{inviteeEmail}}) — a different address will not work. There is nothing to install and no separate
+password to create; your existing Google sign-in is all you need.
+
+If you weren't expecting this, or have any questions, reply to this email to reach {{inviterName}} before
+signing in.
+
+— Sent on behalf of the [Company] Legal Department
+
+CONFIDENTIAL & LEGALLY PRIVILEGED. This message and the Workbench are the confidential and legally
+privileged property of [Company] and its group companies, for authorised internal use only. If you
+received this in error, please delete it and notify the sender.
+```
+
+**Notes**
+- `{{role}}` renders as a friendly label — "Team Member (Contributor)" or "Head of Legal (Reviewer)".
+- An optional one-line **personal note** field on the Add-user form, if filled, is inserted above the
+  "To get in" steps.
+- A **Resend invite** action re-sends this same template unchanged.
+- Final wording is subject to Head-of-Legal approval before first send.
