@@ -22,8 +22,9 @@ import {
   canApprove, canEditEntity, canProposeEntity, canCreateEntity, canProposeNewEntity,
 } from "../lib/constants";
 import { useCompanyData } from "../lib/companyData";
-import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL, AI_ASSIST_ENABLED } from "../lib/config";
+import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
 import { buildInvite, sendInviteViaGmail } from "../lib/invite";
+import { uploadToDrive } from "../lib/driveUpload";
 import { AGENTS, AGENT_MODELS, effectiveAgent } from "../lib/agentTemplates";
 import { callAssist } from "../lib/assist";
 
@@ -1077,7 +1078,7 @@ function PolicyLibrary({ user, isReviewer, showToast }) {
               <tbody>
                 {list.map((p) => (
                   <tr key={p._id}>
-                    <td><b>{p.title}</b></td>
+                    <td><b>{p.title}</b>{p.sourceUrl && <a href={p.sourceUrl} target="_blank" rel="noopener noreferrer" title={p.sourceName || "source file"} style={{ marginLeft: 6 }}>↗</a>}</td>
                     <td>{p.category || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
                     <td>{p.scope === "company" ? <span className="chip">{p.company || "company"}</span> : <span className="chip ok">group</span>}</td>
                     <td className="mono">{p.chunkCount ?? "—"}</td>
@@ -1096,6 +1097,7 @@ function PolicyLibrary({ user, isReviewer, showToast }) {
 
 function PolicyModal({ user, existing, showToast, onClose }) {
   const { entities } = useCompanyData();
+  const { getDriveAccessToken } = useAuth();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [scope, setScope] = useState("group");
@@ -1103,6 +1105,7 @@ function PolicyModal({ user, existing, showToast, onClose }) {
   const [effectiveDate, setEffectiveDate] = useState("");
   const [text, setText] = useState("");
   const [sourceName, setSourceName] = useState("");
+  const [sourceFile, setSourceFile] = useState(null); // original upload, archived to Drive on save
   const [busy, setBusy] = useState(false);
   const [extracting, setExtracting] = useState(false);
 
@@ -1114,6 +1117,7 @@ function PolicyModal({ user, existing, showToast, onClose }) {
       const t = await extractFileText(f);
       setText(t);
       setSourceName(f.name);
+      setSourceFile(f);
       if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
       if (!t.trim()) showToast("No text found — the file may be scanned/image-only. Paste the text instead.");
     } catch (err) { console.error(err); showToast(err.message || "Could not read that file — paste the text instead."); }
@@ -1124,9 +1128,21 @@ function PolicyModal({ user, existing, showToast, onClose }) {
   const valid = title.trim() && text.trim() && (scope === "group" || company);
   const save = async () => {
     setBusy(true);
+    let sourceFileId = "", sourceUrl = "", note = "Policy added & indexed";
+    // Archive the original file to the Drive folder (drive.file). Optional — never blocks the save.
+    if (DRIVE_UPLOAD_ENABLED && sourceFile) {
+      try {
+        const mime = sourceFile.type || "application/octet-stream";
+        let token = await getDriveAccessToken();
+        let up;
+        try { up = await uploadToDrive(sourceFile, sourceFile.name, mime, token, DRIVE_FOLDER_ID); }
+        catch (e) { if (e.status === 401) { token = await getDriveAccessToken({ forceRefresh: true }); up = await uploadToDrive(sourceFile, sourceFile.name, mime, token, DRIVE_FOLDER_ID); } else throw e; }
+        sourceFileId = up.id || ""; sourceUrl = up.webViewLink || "";
+      } catch (e) { console.error("source file upload failed", e); note = "Policy added & indexed — source file upload failed (text saved)"; }
+    }
     try {
-      await addCfgPolicy({ title, category, scope, company, effectiveDate, sourceName }, text, user);
-      showToast("Policy added & indexed"); onClose();
+      await addCfgPolicy({ title, category, scope, company, effectiveDate, sourceName, sourceFileId, sourceUrl }, text, user);
+      showToast(note); onClose();
     } catch (e) { console.error(e); showToast(e.message || "Save failed — General Counsel only"); }
     setBusy(false);
   };

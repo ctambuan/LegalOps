@@ -339,6 +339,11 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.5 — **Source file archived to Drive**) — On policy ingest, the original upload is stored
+  in the Drive folder via `uploadToDrive` (drive.file, the reviewer's identity), and `sourceFileId`/
+  `sourceUrl` are saved on the policy; the Library shows a ↗ link to the original. Gated by
+  `DRIVE_UPLOAD_ENABLED` and never blocks the save (text is the source of truth for retrieval; if Drive is
+  off or fails, the policy still saves). Resolves the v3.4 source-file-storage note.
 - 2026-06-06 (v3.4 — **PDF / DOCX policy ingestion**) — Policy Library now extracts text from uploaded
   **PDF and DOCX** (plus .txt). Extraction runs **server-side** at `/api/policy/extract` (Node, ID-token
   gated) using `unpdf` (PDF) + `mammoth` (DOCX) — chosen over client parsing for reliability and to keep
