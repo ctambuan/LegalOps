@@ -149,6 +149,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // --- Risk Register: operational legal-risk records, read-scoped like policies (group readable by
+    // all; company risks only in-scope). In-scope makers create/update (operational, not maker-checker);
+    // closed via status rather than hard delete; delete reserved to an in-scope approver. ---
+    match /risks/{id} {
+      allow read: if isAllowlisted() && (resource.data.company == 'group' || hasCompany(resource.data.company));
+      allow create: if isMakerFor(request.resource.data.company) && request.resource.data.createdBy == email();
+      allow update: if isMakerFor(resource.data.company);
+      allow delete: if isApproverFor(resource.data.company);
+    }
+
     // --- audit: append-only, immutable ---
     match /audit/{id} {
       allow read: if isReviewer();

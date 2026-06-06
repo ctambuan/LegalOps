@@ -1,6 +1,6 @@
 # Product Requirements Document — Company Data Module (formerly "Settings")
 
-**Status:** BUILT & DEPLOYED — v3.8. Phases 1–3 shipped and merged to `main` (PRs #40–#44); Firestore rules published to project `legalops2026`. **Sections 1–17 below describe the as-built system** and are kept in lockstep with the code; the **Change Log (Section 18)** is the authoritative chronological record. Remaining work (all optional, flagged for cost): populate data, Risk Register module, semantic embeddings, OCR — see Section 17.
+**Status:** BUILT & DEPLOYED — v3.9. Phases 1–3 shipped and merged to `main` (PRs #40–#44); Firestore rules published to project `legalops2026`. **Sections 1–17 below describe the as-built system** and are kept in lockstep with the code; the **Change Log (Section 18)** is the authoritative chronological record. Remaining work (all optional, flagged for cost): populate data, Risk Register module, semantic embeddings, OCR — see Section 17.
 **Product positioning:** A top-level module of the **Legal Operations Workbench** — a centralised, governed **Company Data** layer (the source of truth) every other tool reads from, plus the workbench's access-control surface and its AI agents. Sibling to the live **Contracting Engine** and **Document Number Generator** (see `PRD_Clause_Workbench.md`).
 **Owner (Product):** the owner — General Counsel, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not a Legal Department position)
@@ -136,6 +136,8 @@ COMPANY DATA
 │     Thresholds   — edit USD bands, with impact preview + effective date
 │     Routing      — drill into ONE department to see/edit its approval routes
 │
+├─ ②b RISK REGISTER — legal risks scoped by company; in-scope counsel log/update; grounds the Risk Analyst agent
+│
 ├─ ③ AI & KNOWLEDGE — clearly fenced from corporate records
 │     Agents          — templated instruction + test sandbox
 │     Policy Library  — upload → extraction-preview gate → indexed (version/source on every answer)
@@ -263,7 +265,7 @@ per appetite); per-agent `max_tokens` caps; extended thinking only where it pays
 | Document Processing (draft / review / standard docs / approval-signing routing) | the user's input |
 | Corporate Secretarial | live entities / directors / lines of business |
 | Compliance & Licence Watch | live licence records (lines of business) |
-| Legal Risk Analyst | the user's input (no risk-register collection yet) |
+| Legal Risk Analyst | the legal Risk Register (scope-aware) + the user's input |
 | Report Generator | the matters provided |
 | Legal Intake Triage | the request provided |
 | **Ask Legal** | **policies (retrieved) + entities + approval matrix + signers** |
@@ -355,7 +357,9 @@ The canonical rules live in `firestore.rules`; deploy via the Firebase Console (
 - FR8. Maker-checker: scoped proposals + scoped Change Requests queue with diffs; approve/reject; no
   self-approval; pending markers.
 - FR9. Archive-first with Restore; truthful icons/verbs.
-- FR10. Agents grounded in live structured data (entities / approvals / signers / LoB), scope-aware.
+- FR10. Agents grounded in live structured data (entities / approvals / signers / LoB / risk register), scope-aware.
+- FR12. **Risk Register**: in-scope counsel log/update legal risks (read-scoped by company; closed via status);
+  grounds the Legal Risk Analyst agent.
 - FR11. All writes (propose, approve, reject, direct edit, archive, policy ingest, user add/role/revoke,
   agent tune) audited.
 
@@ -367,8 +371,10 @@ The canonical rules live in `firestore.rules`; deploy via the Firebase Console (
 3. **Phase 3 — Policy Library + retrieval (RAG)**, PDF/DOCX ingest, Drive source, structured-data grounding.
    ✅ BUILT & DEPLOYED (PRs #42–#44).
 
-**Optional next:** Risk Register module (then ground Legal Risk Analyst); semantic embeddings (if lexical
-proves too blunt — has cost); OCR for scanned PDFs (has cost). All flagged for cost per CLAUDE.md #4.
+4. **Risk Register** + Legal Risk Analyst grounding. ✅ BUILT (PR pending merge).
+
+**Optional next:** semantic embeddings (if lexical proves too blunt — has cost); OCR for scanned PDFs
+(has cost). All flagged for cost per CLAUDE.md #4.
 
 ## 17. Open Items
 
@@ -385,12 +391,21 @@ proves too blunt — has cost); OCR for scanned PDFs (has cost). All flagged for
 - OI7. **Invite email** — RESOLVED: sent as the signed-in GC via the Gmail API (`gmail.send`), gated by
   `NEXT_PUBLIC_USER_INVITE_EMAIL`; copy-link fallback otherwise. Template in Appendix A.
 - OI8. **Off-domain exceptions** (external counsel/contractors) — open; default policy is domain-restricted.
-- OI9. **Risk Register module** — needed to ground the Legal Risk Analyst agent in structured data — open.
+- OI9. **Risk Register module** — RESOLVED: `risks` collection (read-scoped by company), Risk Register UI in
+  Company Data, and Legal Risk Analyst grounded in it (`buildStructuredContext("risks")`).
 - OI10. **Per-company read-scoping beyond policies** — entities/approvals are group-readable by all allowlisted
   (accepted for now); revisit if any entity-level data becomes confidential per company.
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.9 — **Risk Register module BUILT**) — New `risks` collection (read-scoped by company:
+  group readable by all, company risks in-scope; in-scope makers create/update, closed via status, delete
+  reserved to approvers) in `firestore.rules` + `lib/data.js` (`listenRisks`/`addRisk`/`saveRisk`). Risk
+  Register UI under Company Data (`app/CompanyData.js`, nav in `app/page.js`): log/edit risks with
+  likelihood, impact, owner, mitigation, status; search + show-closed; scoped to the user's companies.
+  **Legal Risk Analyst agent grounded** in the register (`lib/structuredContext.js` "risks" branch;
+  `dataSource:"risks"`, `live:true`) — the last paste-only agent now reads live data. Resolves OI9. Deploy
+  needs a **rules re-publish** (new `risks` rules) + app merge. Build passes.
 - 2026-06-06 (v3.8 — **PRD Maintenance Protocol added**) — Owner directive: on every "update PRD", update
   the repo PRD + Change Log + version, publish the latest to the Google Drive Workbench folder, archive the
   prior Drive copy into the Archived subfolder, and use the latest as the source for the next update.
