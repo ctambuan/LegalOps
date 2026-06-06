@@ -339,6 +339,15 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.6 — **Agents grounded in structured data**) — `lib/structuredContext.js` builds a
+  compact, **scope-aware** context from the live `cfg_*` records (entities, directors, lines of business,
+  approval thresholds + matrix, authorised signers); company-scoped roles see only their companies'
+  entity data, the approval matrix is group-wide. Wired so **Corporate Secretarial** (entities/directors/
+  LoB), **Compliance & Licence Watch** (licence records), and **Ask Legal** (entities + approvals +
+  signers, *plus* its policy retrieval) now answer from live dashboard data and decline when it isn't
+  there. Client-side reads via existing rules; **no AI/embedding/infra cost** (capped context, a handful
+  of Firestore reads). Route context wording generalised (records + policies). `live:true` for the three.
+  Risk Analyst stays paste-based (no risk-register collection yet). Build passes; app-merge only.
 - 2026-06-06 (v3.5 — **Source file archived to Drive**) — On policy ingest, the original upload is stored
   in the Drive folder via `uploadToDrive` (drive.file, the reviewer's identity), and `sourceFileId`/
   `sourceUrl` are saved on the policy; the Library shows a ↗ link to the original. Gated by

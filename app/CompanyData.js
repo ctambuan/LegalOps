@@ -15,6 +15,7 @@ import {
   listenCfgPolicies, addCfgPolicy, updateCfgPolicyMeta, archiveCfgPolicy,
 } from "../lib/data";
 import { retrievePolicyContext } from "../lib/policy";
+import { buildStructuredContext } from "../lib/structuredContext";
 import { extractFileText } from "../lib/extractText";
 import { ENTITIES, DEPARTMENTS, DEFAULT_THRESHOLDS, bucketLabel, approverCell } from "../lib/docgen";
 import {
@@ -1006,6 +1007,11 @@ function RunAgentModal({ agent, showToast, onClose }) {
         const r = await retrievePolicyContext({ role, companies }, q);
         context = r.context; src = r.sources;
       }
+      if (agent.dataSource) {
+        // Live structured data (entities, approvals, signers, …), scoped to what the user may see.
+        const sc = await buildStructuredContext(agent.dataSource, { role, companies });
+        if (sc) context = context ? `${context}\n\n--- Company data ---\n${sc}` : sc;
+      }
       const answer = await callAssist("agent", { instruction: agent.instruction, question: q, model: agent.model, maxTokens: agent.maxTokens, thinking: agent.thinking, context });
       setOut(answer); setSources(src);
     } catch (e) { setErr(e.message || "Failed"); }
@@ -1021,9 +1027,9 @@ function RunAgentModal({ agent, showToast, onClose }) {
           <button className="mclose" onClick={onClose}>×</button>
         </div>
         <div className="mbody" style={{ paddingTop: 16 }}>
-          {agent.retrieves
-            ? <div className="hint">Answers are grounded in the Policy Library you can access, and cite their sources. If nothing relevant is stored, the agent will say so.</div>
-            : (!agent.live && <div className="hint">This agent works best on details you paste in; it will read your stored data automatically in a later phase.</div>)}
+          {(agent.retrieves || agent.dataSource)
+            ? <div className="hint">Answers are grounded in your dashboard data{agent.retrieves ? " and the policies you can access" : ""}, scoped to what you&rsquo;re entitled to see. If the information isn&rsquo;t stored, the agent will say so.</div>
+            : (!agent.live && <div className="hint">This agent works best on details you paste in.</div>)}
           <div className="field">
             <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask your question, or paste the text to work on…" style={{ minHeight: 100 }} />
             <div style={{ textAlign: "right", marginTop: 6 }}>
