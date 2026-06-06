@@ -116,7 +116,7 @@ export async function POST(req) {
     // Optional retrieved grounding from the Policy Library (client does scope-aware retrieval).
     const context = typeof body.context === "string" ? body.context.trim() : "";
     userText = context
-      ? `Use ONLY the following context from the Company's policies to answer, and cite the sources you rely on by their [n] label. If the answer is not in the context, say so plainly.\n\nContext:\n${context}\n\nQuestion: ${question}`
+      ? `Use ONLY the following context from the Company's own records and policies to answer. Reference the specific policy or record you rely on (use the [n] labels where provided). If the answer is not in the context, say so plainly — do not guess.\n\nContext:\n${context}\n\nQuestion: ${question}`
       : question;
     if (typeof body.model === "string" && ALLOWED_MODELS.includes(body.model)) model = body.model;
     maxTokens = Math.min(8000, Math.max(256, Number(body.maxTokens) || 1024));
