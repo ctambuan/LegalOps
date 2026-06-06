@@ -1,6 +1,6 @@
 # Product Requirements Document — Company Data Module (formerly "Settings")
 
-**Status:** BUILT & DEPLOYED — v3.6. Phases 1–3 shipped and merged to `main` (PRs #40–#44); Firestore rules published to project `legalops2026`. **Sections 1–17 below describe the as-built system** and are kept in lockstep with the code; the **Change Log (Section 18)** is the authoritative chronological record. Remaining work (all optional, flagged for cost): populate data, Risk Register module, semantic embeddings, OCR — see Section 17.
+**Status:** BUILT & DEPLOYED — v3.8. Phases 1–3 shipped and merged to `main` (PRs #40–#44); Firestore rules published to project `legalops2026`. **Sections 1–17 below describe the as-built system** and are kept in lockstep with the code; the **Change Log (Section 18)** is the authoritative chronological record. Remaining work (all optional, flagged for cost): populate data, Risk Register module, semantic embeddings, OCR — see Section 17.
 **Product positioning:** A top-level module of the **Legal Operations Workbench** — a centralised, governed **Company Data** layer (the source of truth) every other tool reads from, plus the workbench's access-control surface and its AI agents. Sibling to the live **Contracting Engine** and **Document Number Generator** (see `PRD_Clause_Workbench.md`).
 **Owner (Product):** the owner — General Counsel, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not a Legal Department position)
