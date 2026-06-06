@@ -29,8 +29,15 @@ design, architect, and build in this repository. Follow it unless the user overr
   - Server routes verify the caller by validating the Firebase ID token manually (`verifyRequest`).
   - Roles live in the `allowlist` doc's `role` field (and optional `reviewer` custom claim); there is
     no server-side claim-setting. User management is reviewer-gated client writes governed by rules.
-- **Access model:** Google sign-in + an `allowlist` collection (doc id = lowercased email). A user only
-  gets in if allowlisted. `isAllowlisted()` / `isReviewer()` helpers enforce this in `firestore.rules`.
+- **Access model (group RBAC + company scope):** Google sign-in + an `allowlist` collection (doc id =
+  lowercased email) holding `{ role, companies }`. Roles: **gc** (General Counsel, super-admin, group),
+  **regional** (Regional Counsel, maker, group), **hol** (Head of Legal, approver+editor, per-company),
+  **country** (Country Counsel, maker, per-company). `companies` is `"all"` or an array of entity codes.
+  Legacy `reviewer`/`contributor` normalise to `gc`/`regional`. Capability helpers live in `lib/constants.js`
+  (UI) and **mirror `firestore.rules` (the boundary)**: `isGC`, `hasCompany`, `isApproverFor`, `isMakerFor`.
+  Key invariants: only GC manages users & grants (no privilege escalation by others); approvals are
+  company-scoped (GC, or that company's Head of Legal) with **no self-approval**; scope is enforced in
+  rules, never UI-only.
 - **Audit everything.** Every write goes through `audit()` (append-only `audit` collection). Keep it so.
 - **Master data → Company Data module.** Editable `cfg_*` collections (entities, etc.) are the single
   source of truth; the hardcoded arrays in `lib/docgen.js` are the seed/fallback. Tools read via

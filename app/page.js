@@ -8,7 +8,7 @@ import {
   createProposal, transitionProposal, logExport, seedClausesViaApi,
   calibrateClauseField, commitCalibrationToRepo,
 } from "../lib/data";
-import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION, roleLabel } from "../lib/constants";
+import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION, roleLabel, normalizeRole } from "../lib/constants";
 import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_MANAGE_ENABLED, DRIVE_FOLDER_ID, PLAYBOOK_VERSION_TAG } from "../lib/config";
 import DriveArchive from "./DriveArchive";
 import { exportMaster } from "../lib/exportDocx";
@@ -24,7 +24,7 @@ export default function Page() {
   const [tab, setTab] = useState("library");
   const [docTab, setDocTab] = useState("form");
   const [ttTab, setTtTab] = useState("dashboard");
-  const [coTab, setCoTab] = useState("team");
+  const [coTab, setCoTab] = useState("entities");
   const [clauses, setClauses] = useState([]);
   const [proposals, setProposals] = useState([]);
   const [adopted, setAdopted] = useState([]);
@@ -194,11 +194,11 @@ export default function Page() {
               )}
               {f.key === "company" && feature === "company" && (
                 <div className="subnav">
-                  {CoSubItem("team", "Team & Access")}
                   {CoSubItem("entities", "Entities (Records)")}
                   {CoSubItem("approval", "Approval Policy")}
                   {CoSubItem("ai", "AI & Knowledge")}
-                  {isReviewer && CoSubItem("changes", "Change Requests")}
+                  {["gc", "hol"].includes(normalizeRole(role)) && CoSubItem("changes", "Change Requests")}
+                  {isReviewer && CoSubItem("team", "Team & Access")}
                 </div>
               )}
             </div>

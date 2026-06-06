@@ -6,13 +6,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../lib/auth";
 import {
-  listenAllowlist, addAllowlistUser, updateAllowlistRole, removeAllowlistUser,
+  listenAllowlist, addAllowlistUser, updateAllowlistAccess, removeAllowlistUser,
   listenCfgEntities, seedCfgEntities, addCfgEntity, saveCfgEntity, archiveCfgEntity,
   listenEntitySub, addEntitySub, saveEntitySub, deleteEntitySub,
   listenCfgProposals, proposeChange, decideCfgProposal,
 } from "../lib/data";
 import { ENTITIES } from "../lib/docgen";
-import { roleLabel } from "../lib/constants";
+import {
+  ROLES, roleLabel, normalizeRole, inScope,
+  canApprove, canEditEntity, canProposeEntity, canCreateEntity, canProposeNewEntity,
+} from "../lib/constants";
+import { useCompanyData } from "../lib/companyData";
 import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL } from "../lib/config";
 import { buildInvite, sendInviteViaGmail } from "../lib/invite";
 
@@ -28,10 +32,19 @@ const fmtWhen = (ts) => (ts?.toDate ? ts.toDate().toLocaleString() : "—");
 const domainOf = (email) => (email.split("@")[1] || "").toLowerCase();
 const validEmail = (e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
 
+const scopeSummary = (r) => {
+  const role = normalizeRole(r.role);
+  if (role === "gc" || role === "regional") return "All companies (group)";
+  const c = r.companies;
+  if (c === "all") return "All companies";
+  if (Array.isArray(c) && c.length) return c.join(", ");
+  return "— none assigned —";
+};
+
 function TeamAccess({ user, isReviewer, showToast }) {
   const [rows, setRows] = useState([]);
   const [q, setQ] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [modal, setModal] = useState(null); // { mode:'add'|'resend'|'edit', row? }
   const [busy, setBusy] = useState("");
 
   useEffect(() => {
@@ -40,28 +53,20 @@ function TeamAccess({ user, isReviewer, showToast }) {
   }, [isReviewer]);
 
   const me = (user.email || "").toLowerCase();
-  const reviewerCount = useMemo(() => rows.filter((r) => r.role === "reviewer").length, [rows]);
+  const gcCount = useMemo(() => rows.filter((r) => normalizeRole(r.role) === "gc").length, [rows]);
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return rows.filter((r) => !t || [r.email, r.displayName, r.role, r.status].some((v) => String(v || "").toLowerCase().includes(t)));
+    return rows.filter((r) => !t || [r.email, r.displayName, roleLabel(r.role), r.status].some((v) => String(v || "").toLowerCase().includes(t)));
   }, [rows, q]);
 
+  // isReviewer === isGC; only the General Counsel manages users (owner decision).
   if (!isReviewer) {
     return <div className="lockmsg">Team &amp; Access is restricted to the <b>General Counsel</b>. Ask them to add or change a team member&rsquo;s access.</div>;
   }
 
-  const changeRole = async (r, role) => {
-    if (r.email === me) { showToast("You cannot change your own role."); return; }
-    if (r.role === "reviewer" && role !== "reviewer" && reviewerCount <= 1) { showToast("Cannot demote the last General Counsel."); return; }
-    setBusy(r.email);
-    try { await updateAllowlistRole(r.email, role, user); showToast(`${r.email} is now ${roleLabel(role)}`); }
-    catch (e) { console.error(e); showToast(e.message || "Could not change role"); }
-    setBusy("");
-  };
-
   const remove = async (r) => {
     if (r.email === me) { showToast("You cannot remove your own account."); return; }
-    if (r.role === "reviewer" && reviewerCount <= 1) { showToast("Cannot remove the last General Counsel."); return; }
+    if (normalizeRole(r.role) === "gc" && gcCount <= 1) { showToast("Cannot remove the last General Counsel."); return; }
     if (!confirm(`Remove access for ${r.email}? They will be blocked at next sign-in.`)) return;
     setBusy(r.email);
     try { await removeAllowlistUser(r.email, user); showToast(`Access removed for ${r.email}`); }
@@ -71,10 +76,9 @@ function TeamAccess({ user, isReviewer, showToast }) {
 
   return (
     <>
-      <div className="lockmsg">Add a colleague by email and they are authorised immediately — they sign in with their
-        existing Google account (no account is created for them). {USER_INVITE_EMAIL_ENABLED
-          ? "An invitation email is sent automatically from your address."
-          : "Email invites are off, so you'll get a copyable invite link to send them."} Only
+      <div className="lockmsg">Add a colleague by email and assign their role and the companies they cover. They are
+        authorised immediately and sign in with their existing Google account (no account is created for them).
+        {USER_INVITE_EMAIL_ENABLED ? " An invitation email is sent automatically from your address." : " Email invites are off, so you'll get a copyable invite link to send them."} Only
         <b> {ALLOWED_USER_DOMAINS.join(" and ")}</b> addresses may be added.</div>
 
       <div className="toolbar">
@@ -83,7 +87,7 @@ function TeamAccess({ user, isReviewer, showToast }) {
           <input placeholder="Search by email, name, role or status…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <span className="chip">{list.length} users</span>
-        <button className="btn primary sm" onClick={() => setAdding(true)} style={{ marginLeft: "auto" }}>+ Add user</button>
+        <button className="btn primary sm" onClick={() => setModal({ mode: "add" })} style={{ marginLeft: "auto" }}>+ Add user</button>
       </div>
 
       {list.length === 0 ? (
@@ -91,7 +95,7 @@ function TeamAccess({ user, isReviewer, showToast }) {
       ) : (
         <div className="tablewrap">
           <table className="dtable">
-            <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+            <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Companies</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
             <tbody>
               {list.map((r) => {
                 const self = r.email === me;
@@ -99,17 +103,13 @@ function TeamAccess({ user, isReviewer, showToast }) {
                   <tr key={r._id}>
                     <td className="mono">{r.email}{self && <span className="chip" style={{ marginLeft: 6 }}>you</span>}</td>
                     <td>{r.displayName || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
-                    <td>
-                      <select value={r.role || "contributor"} disabled={self || busy === r.email}
-                        onChange={(e) => changeRole(r, e.target.value)} style={{ padding: "3px 6px", fontSize: 12 }}>
-                        <option value="contributor">Regional Counsel</option>
-                        <option value="reviewer">General Counsel</option>
-                      </select>
-                    </td>
+                    <td>{roleLabel(r.role)}</td>
+                    <td style={{ fontSize: 12 }}>{scopeSummary(r)}</td>
                     <td><span className={"chip" + (r.status === "active" ? " ok" : "")}>{r.status || "invited"}</span></td>
                     <td>{fmtWhen(r.lastSignInAt)}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
-                      <button className="btn sm ghost" disabled={busy === r.email} onClick={() => setAdding({ resend: r })}>Resend invite</button>
+                      <button className="btn sm ghost" disabled={self || busy === r.email} onClick={() => setModal({ mode: "edit", row: r })}>Edit access</button>
+                      <button className="btn sm ghost" disabled={busy === r.email} onClick={() => setModal({ mode: "resend", row: r })} style={{ marginLeft: 6 }}>Resend</button>
                       <button className="btn sm ghost" disabled={self || busy === r.email} onClick={() => remove(r)} style={{ marginLeft: 6 }}>Remove</button>
                     </td>
                   </tr>
@@ -120,26 +120,54 @@ function TeamAccess({ user, isReviewer, showToast }) {
         </div>
       )}
 
-      {adding && <AddUserModal user={user} resend={adding.resend} existing={rows} showToast={showToast} onClose={() => setAdding(false)} />}
+      {modal && <UserModal user={user} mode={modal.mode} row={modal.row} existing={rows} showToast={showToast} onClose={() => setModal(null)} />}
     </>
   );
 }
 
-function AddUserModal({ user, resend, existing, showToast, onClose }) {
+// Company multi-select (tickboxes) for company-scoped roles. Group roles cover all companies.
+function CompanyPicker({ value, onChange }) {
+  const { entities } = useCompanyData();
+  const list = value === "all" ? [] : (Array.isArray(value) ? value : []);
+  const toggle = (code) => onChange(list.includes(code) ? list.filter((c) => c !== code) : [...list, code]);
+  return (
+    <div className="field">
+      <label>Companies in scope</label>
+      <div className="tablewrap" style={{ maxHeight: 180, overflowY: "auto", padding: 8 }}>
+        {entities.length === 0 ? <div className="hint">No entities yet — add them under Entities first.</div>
+          : entities.map((e) => (
+            <label key={e._id || e.code} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", cursor: "pointer" }}>
+              <input type="checkbox" checked={list.includes(e.code)} onChange={() => toggle(e.code)} />
+              <span>{e.name} <span className="chip" style={{ marginLeft: 4 }}>{e.code}</span></span>
+            </label>
+          ))}
+      </div>
+      <div className="hint">{list.length} compan{list.length === 1 ? "y" : "ies"} selected — the user may only act within these.</div>
+    </div>
+  );
+}
+
+// Add a user, resend an invite, or edit an existing user's role + company scope.
+function UserModal({ user, mode, row, existing, showToast, onClose }) {
   const { getGoogleAccessToken } = useAuth();
-  const [email, setEmail] = useState(resend?.email || "");
-  const [displayName, setDisplayName] = useState(resend?.displayName || "");
-  const [role, setRole] = useState(resend?.role || "contributor");
+  const isAdd = mode === "add";
+  const isResend = mode === "resend";
+  const isEdit = mode === "edit";
+  const [email, setEmail] = useState(row?.email || "");
+  const [displayName, setDisplayName] = useState(row?.displayName || "");
+  const [role, setRole] = useState(normalizeRole(row?.role) || "country");
+  const [companies, setCompanies] = useState(row?.companies === "all" ? "all" : (Array.isArray(row?.companies) ? row.companies : []));
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState("");
 
   const e = email.trim().toLowerCase();
   const domainOk = ALLOWED_USER_DOMAINS.includes(domainOf(e));
-  const dup = !resend && existing.some((r) => r.email === e);
-  const valid = validEmail(e) && domainOk && !dup;
+  const dup = isAdd && existing.some((r) => r.email === e);
+  const companyScoped = role === "hol" || role === "country";
+  const scopeOk = !companyScoped || (Array.isArray(companies) && companies.length > 0);
+  const valid = (isEdit || (validEmail(e) && domainOk && !dup)) && scopeOk;
 
-  // Send the invite via the admin's Gmail (if enabled), else surface a copyable link.
   const deliver = async () => {
     const { subject, body } = buildInvite({ inviteeEmail: e, inviteeName: displayName, inviterName: user.displayName || user.email, role, note });
     if (!USER_INVITE_EMAIL_ENABLED) { setLink(APP_URL); return "link"; }
@@ -152,46 +180,63 @@ function AddUserModal({ user, resend, existing, showToast, onClose }) {
   const submit = async () => {
     setBusy(true);
     try {
-      if (!resend) await addAllowlistUser({ email: e, role, displayName }, user);
+      if (isEdit) {
+        await updateAllowlistAccess(row.email, { role, companies }, user);
+        showToast(`Access updated for ${row.email}`); onClose(); setBusy(false); return;
+      }
+      if (isAdd) await addAllowlistUser({ email: e, role, companies, displayName }, user);
       const how = await deliver();
-      if (how === "email") { showToast(resend ? `Invite re-sent to ${e}` : `${e} added — invite emailed`); onClose(); }
-      else { showToast(resend ? `${e} ready — copy the link below` : `${e} added — copy the invite link below`); }
+      if (how === "email") { showToast(isResend ? `Invite re-sent to ${e}` : `${e} added — invite emailed`); onClose(); }
+      else { showToast(isResend ? `${e} ready — copy the link below` : `${e} added — copy the invite link below`); }
     } catch (err) {
       console.error(err);
-      // The user is authorised even if the email failed — make that recoverable, not a dead end.
       setLink(APP_URL);
-      showToast(err.message ? `Authorised, but email failed: ${err.message}` : "Authorised — use the invite link below");
+      showToast(err.message ? `Saved, but email failed: ${err.message}` : "Saved — use the invite link below");
     }
     setBusy(false);
   };
 
   const copy = (t) => { navigator.clipboard?.writeText(t); showToast("Invite link copied"); };
+  const heading = isResend ? "Resend invite" : isEdit ? "Edit access" : "Add user";
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: 520 }} onClick={(ev) => ev.stopPropagation()}>
+      <div className="modal" style={{ maxWidth: 540 }} onClick={(ev) => ev.stopPropagation()}>
         <div className="mhead">
-          <div className="cnum">{resend ? "Resend invite" : "Add user"}</div>
-          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{resend ? resend.email : "Authorise a colleague"}</div>
+          <div className="cnum">{heading}</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{(isResend || isEdit) ? row.email : "Authorise a colleague"}</div>
           <button className="mclose" onClick={onClose}>×</button>
         </div>
         <div className="mbody" style={{ paddingTop: 16 }}>
-          <div className="field"><label>Work email</label>
-            <input value={email} disabled={!!resend} onChange={(ev) => setEmail(ev.target.value)} placeholder={`name@${ALLOWED_USER_DOMAINS[0]}`} />
-            {email && !validEmail(e) && <div className="hint" style={{ color: "var(--oxblood)" }}>Enter a valid email address.</div>}
-            {email && validEmail(e) && !domainOk && <div className="hint" style={{ color: "var(--oxblood)" }}>Only {ALLOWED_USER_DOMAINS.join(" / ")} addresses can be added.</div>}
-            {dup && <div className="hint" style={{ color: "var(--oxblood)" }}>This person is already on the list.</div>}
-          </div>
-          <div className="two">
-            <div className="field"><label>Name (optional)</label>
-              <input value={displayName} onChange={(ev) => setDisplayName(ev.target.value)} placeholder="e.g. Jane Counsel" /></div>
-            <div className="field"><label>Role</label>
-              <select value={role} onChange={(ev) => setRole(ev.target.value)}>
-                <option value="contributor">Regional Counsel</option>
-                <option value="reviewer">General Counsel</option>
-              </select></div>
-          </div>
-          {!resend && <div className="field"><label>Personal note (optional)</label>
+          {isAdd && (
+            <div className="field"><label>Work email</label>
+              <input value={email} onChange={(ev) => setEmail(ev.target.value)} placeholder={`name@${ALLOWED_USER_DOMAINS[0]}`} />
+              {email && !validEmail(e) && <div className="hint" style={{ color: "var(--oxblood)" }}>Enter a valid email address.</div>}
+              {email && validEmail(e) && !domainOk && <div className="hint" style={{ color: "var(--oxblood)" }}>Only {ALLOWED_USER_DOMAINS.join(" / ")} addresses can be added.</div>}
+              {dup && <div className="hint" style={{ color: "var(--oxblood)" }}>This person is already on the list.</div>}
+            </div>
+          )}
+          {!isResend && (
+            <>
+              <div className="two">
+                {isAdd && <div className="field"><label>Name (optional)</label>
+                  <input value={displayName} onChange={(ev) => setDisplayName(ev.target.value)} placeholder="e.g. Jane Counsel" /></div>}
+                <div className="field"><label>Role</label>
+                  <select value={role} onChange={(ev) => setRole(ev.target.value)}>
+                    {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}{v.scope === "group" ? " · group" : " · per-company"}</option>)}
+                  </select></div>
+              </div>
+              <div className="hint" style={{ marginTop: -4 }}>
+                {role === "gc" && "Super-admin: approves everything, manages users, group-wide."}
+                {role === "regional" && "Maker across all companies — proposes changes for General Counsel approval."}
+                {role === "hol" && "Approves and edits directly, for the assigned companies only."}
+                {role === "country" && "Maker for the assigned companies — proposes changes for approval."}
+              </div>
+              {companyScoped ? <CompanyPicker value={companies} onChange={setCompanies} />
+                : <div className="hint">Group-wide role — covers all companies; no per-company selection needed.</div>}
+            </>
+          )}
+          {isAdd && <div className="field"><label>Personal note (optional)</label>
             <textarea value={note} onChange={(ev) => setNote(ev.target.value)} placeholder="Added to the top of the invite email." style={{ minHeight: 64 }} /></div>}
 
           {link && (
@@ -204,8 +249,8 @@ function AddUserModal({ user, resend, existing, showToast, onClose }) {
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>{link ? "Done" : "Cancel"}</button>
-          <button className="btn primary" disabled={busy || (!resend && !valid)} onClick={submit}>
-            {busy ? "Working…" : resend ? "Resend invite" : (USER_INVITE_EMAIL_ENABLED ? "Add & send invite" : "Add user")}
+          <button className="btn primary" disabled={busy || !valid} onClick={submit}>
+            {busy ? "Working…" : isResend ? "Resend invite" : isEdit ? "Save access" : (USER_INVITE_EMAIL_ENABLED ? "Add & send invite" : "Add user")}
           </button>
         </div>
       </div>
@@ -249,6 +294,7 @@ const PROFILE_FIELDS = [
 ];
 
 function Entities({ user, isReviewer, showToast }) {
+  const { role, companies } = useAuth();
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -282,10 +328,10 @@ function Entities({ user, isReviewer, showToast }) {
       && (!t || [e.name, e.code, e.jurisdiction, e.registrationNo].some((v) => String(v || "").toLowerCase().includes(t))));
   }, [rows, q, typeFilter, showArchived]);
 
-  if (sel) {
+  if (sel && sel !== "__new__") {
     const entity = (rows || []).find((e) => e._id === sel);
     if (!entity) { setSel(null); return null; }
-    return <EntityDetail entity={entity} user={user} isReviewer={isReviewer} showToast={showToast} onBack={() => setSel(null)} />;
+    return <EntityDetail entity={entity} user={user} role={role} companies={companies} showToast={showToast} onBack={() => setSel(null)} />;
   }
 
   if (rows === null) return <div className="lockmsg">Loading entities…</div>;
@@ -294,7 +340,7 @@ function Entities({ user, isReviewer, showToast }) {
     <>
       {rows.length === 0 && (
         <div className="lockmsg" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <span>No entities yet. {isReviewer ? "Load the bundled defaults to start, then edit them — or add your own." : "Ask the Head of Legal to set up the entity list."}</span>
+          <span>No entities yet. {isReviewer ? "Load the bundled defaults to start, then edit them — or add your own." : "Ask the General Counsel to set up the entity list."}</span>
           {isReviewer && <button className="btn primary sm" disabled={seeding} onClick={seed}>{seeding ? "Loading…" : `Load ${ENTITIES.length} default entities`}</button>}
         </div>
       )}
@@ -302,7 +348,7 @@ function Entities({ user, isReviewer, showToast }) {
         <div className="lockmsg">The group entity register, shared across regional counsel and led by the General Counsel.
           Classify each entity as a <b>Holding Company</b>, <b>Controlled Subsidiary</b> or <b>Non-Controlled Subsidiary</b>
           — open an entity to manage its directors, lines of business and authorized signers.
-          {isReviewer ? " You can edit directly; Regional Counsel changes arrive as Change Requests for your approval." : " Your additions and edits are submitted to the General Counsel for approval."}</div>
+          Changes you are authorised to make apply directly; otherwise they are submitted as Change Requests for approval.</div>
       )}
       {isReviewer && reviewPending > 0 && <div className="lockmsg" style={{ borderColor: "var(--esc)" }}>{reviewPending} change request{reviewPending > 1 ? "s" : ""} await your review — open <b>Change Requests</b>.</div>}
       {!isReviewer && myPending > 0 && <div className="lockmsg">You have {myPending} proposal{myPending > 1 ? "s" : ""} awaiting General Counsel approval.</div>}
@@ -318,10 +364,11 @@ function Entities({ user, isReviewer, showToast }) {
         </select>
         <span className="chip">{list.length} entities</span>
         <label className="chip" style={{ cursor: "pointer" }}><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} style={{ marginRight: 6 }} />Show archived</label>
-        <button className="btn primary sm" onClick={() => setSel("__new__")} style={{ marginLeft: "auto" }}>{isReviewer ? "+ Add entity" : "+ Propose entity"}</button>
+        {(canCreateEntity(role) || canProposeNewEntity(role)) &&
+          <button className="btn primary sm" onClick={() => setSel("__new__")} style={{ marginLeft: "auto" }}>{canCreateEntity(role) ? "+ Add entity" : "+ Propose entity"}</button>}
       </div>
 
-      {sel === "__new__" && <EntityProfileModal user={user} isReviewer={isReviewer} showToast={showToast} existing={rows} onClose={() => setSel(null)} onCreated={(id) => setSel(id)} />}
+      {sel === "__new__" && <EntityProfileModal user={user} role={role} companies={companies} showToast={showToast} existing={rows} onClose={() => setSel(null)} onCreated={(id) => setSel(id)} />}
 
       {list.length === 0 && rows.length > 0 ? <div className="empty"><div className="big">No matches.</div>Adjust your search.</div> : (
         <div className="tablewrap">
@@ -346,10 +393,12 @@ function Entities({ user, isReviewer, showToast }) {
   );
 }
 
-function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
+function EntityDetail({ entity, user, role, companies, showToast, onBack }) {
   const [t, setT] = useState("profile");
   const [editProfile, setEditProfile] = useState(false);
   const archived = entity.status === "archived";
+  const canEdit = canEditEntity(role, companies, entity.code);   // direct (GC or this company's HoL)
+  const canPropose = canProposeEntity(role, companies, entity.code);
   const TABS = [["profile", "Profile"], ["directors", "Directors"], ["lob", "Lines of Business"], ["signers", "Authorized Signers"]];
 
   const toggleArchive = async () => {
@@ -365,7 +414,7 @@ function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
         <span style={{ fontWeight: 700, fontSize: 16 }}>{entity.name}</span>
         <span className="chip mono">{entity.code}</span>
         {archived && <span className="chip">archived</span>}
-        {isReviewer && <button className="btn sm ghost" onClick={toggleArchive} style={{ marginLeft: "auto" }}>{archived ? "Restore" : "Archive"}</button>}
+        {canEdit && <button className="btn sm ghost" onClick={toggleArchive} style={{ marginLeft: "auto" }}>{archived ? "Restore" : "Archive"}</button>}
       </div>
 
       <div className="tabs2" style={{ marginBottom: 14 }}>
@@ -380,20 +429,20 @@ function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
               <div key={f.k} className="kvrow"><dt>{f.l}</dt><dd>{entity[f.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</dd></div>
             ))}
           </dl>
-          <button className="btn primary sm" onClick={() => setEditProfile(true)}>{isReviewer ? "Edit profile" : "Propose edit"}</button>
-          {editProfile && <EntityProfileModal user={user} isReviewer={isReviewer} showToast={showToast} editing={entity} onClose={() => setEditProfile(false)} />}
+          {(canEdit || canPropose) && <button className="btn primary sm" onClick={() => setEditProfile(true)}>{canEdit ? "Edit profile" : "Propose edit"}</button>}
+          {editProfile && <EntityProfileModal user={user} role={role} companies={companies} showToast={showToast} editing={entity} onClose={() => setEditProfile(false)} />}
         </div>
       )}
-      {t === "directors" && <SubTable entityId={entity._id} sub="directors" columns={DIRECTOR_COLS} label="director" isReviewer={isReviewer} user={user} showToast={showToast} />}
-      {t === "lob" && <SubTable entityId={entity._id} sub="lob" columns={LOB_COLS} label="line of business" isReviewer={isReviewer} user={user} showToast={showToast} />}
-      {t === "signers" && <SubTable entityId={entity._id} sub="signers" columns={SIGNER_COLS} label="signer" isReviewer={isReviewer} user={user} showToast={showToast} />}
+      {t === "directors" && <SubTable entityId={entity._id} sub="directors" columns={DIRECTOR_COLS} label="director" canEdit={canEdit} user={user} showToast={showToast} />}
+      {t === "lob" && <SubTable entityId={entity._id} sub="lob" columns={LOB_COLS} label="line of business" canEdit={canEdit} user={user} showToast={showToast} />}
+      {t === "signers" && <SubTable entityId={entity._id} sub="signers" columns={SIGNER_COLS} label="signer" canEdit={canEdit} user={user} showToast={showToast} />}
     </>
   );
 }
 
 // Create or edit an entity profile (code is the doc id — editable only on create).
 // Regional Counsel submit a proposal for the General Counsel to approve; the GC saves directly.
-function EntityProfileModal({ user, isReviewer, showToast, editing, existing = [], onClose, onCreated }) {
+function EntityProfileModal({ user, role, companies, showToast, editing, existing = [], onClose, onCreated }) {
   const [code, setCode] = useState(editing?.code || "");
   const [f, setF] = useState(() => {
     const init = { entityType: editing?.entityType || "" };
@@ -403,23 +452,23 @@ function EntityProfileModal({ user, isReviewer, showToast, editing, existing = [
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const dup = !editing && existing.some((e) => e._id === code.trim());
   const valid = (editing || (code.trim() && !dup)) && f.name.trim();
+  // Direct write if the user is an approver for this company (edit) or GC (create); else propose.
+  const direct = editing ? canEditEntity(role, companies, editing.code) : canCreateEntity(role);
 
   const save = async () => {
     setBusy(true);
     try {
-      if (isReviewer) {
+      if (direct) {
         if (editing) { await saveCfgEntity(editing._id, f, user); showToast("Entity updated"); onClose(); }
         else { const id = await addCfgEntity({ ...f, code: code.trim() }, user); showToast("Entity added"); onClose(); onCreated?.(id); }
+      } else if (editing) {
+        const before = { entityType: editing.entityType || "" };
+        PROFILE_FIELDS.forEach((x) => (before[x.k] = editing[x.k] || ""));
+        await proposeChange({ domain: "entity", action: "update", targetId: editing._id, company: editing.code, label: editing.name, before, after: f }, user);
+        showToast("Submitted for approval"); onClose();
       } else {
-        if (editing) {
-          const before = { entityType: editing.entityType || "" };
-          PROFILE_FIELDS.forEach((x) => (before[x.k] = editing[x.k] || ""));
-          await proposeChange({ domain: "entity", action: "update", targetId: editing._id, label: editing.name, before, after: f }, user);
-        } else {
-          await proposeChange({ domain: "entity", action: "create", label: f.name, after: { ...f, code: code.trim() } }, user);
-        }
-        showToast("Submitted for General Counsel approval");
-        onClose();
+        await proposeChange({ domain: "entity", action: "create", company: code.trim(), label: f.name, after: { ...f, code: code.trim() } }, user);
+        showToast("Submitted for approval"); onClose();
       }
     } catch (e) { console.error(e); showToast(e.message || "Save failed"); }
     setBusy(false);
@@ -453,7 +502,7 @@ function EntityProfileModal({ user, isReviewer, showToast, editing, existing = [
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Cancel</button>
           <button className="btn primary" disabled={busy || !valid} onClick={save}>
-            {busy ? "Working…" : isReviewer ? (editing ? "Save" : "Add entity") : "Submit for approval"}</button>
+            {busy ? "Working…" : direct ? (editing ? "Save" : "Add entity") : "Submit for approval"}</button>
         </div>
       </div>
     </div>
@@ -461,7 +510,7 @@ function EntityProfileModal({ user, isReviewer, showToast, editing, existing = [
 }
 
 // Generic add/edit/delete table for a per-entity subcollection.
-function SubTable({ entityId, sub, columns, label, isReviewer, user, showToast }) {
+function SubTable({ entityId, sub, columns, label, canEdit, user, showToast }) {
   const [rows, setRows] = useState([]);
   const [edit, setEdit] = useState(null); // row object, or {} for new
   useEffect(() => listenEntitySub(entityId, sub, setRows), [entityId, sub]);
@@ -476,17 +525,17 @@ function SubTable({ entityId, sub, columns, label, isReviewer, user, showToast }
     <>
       <div className="toolbar">
         <span className="chip">{rows.length} {rows.length === 1 ? label : `${label}s`}</span>
-        {isReviewer && <button className="btn primary sm" onClick={() => setEdit({})} style={{ marginLeft: "auto" }}>+ Add {label}</button>}
+        {canEdit && <button className="btn primary sm" onClick={() => setEdit({})} style={{ marginLeft: "auto" }}>+ Add {label}</button>}
       </div>
-      {rows.length === 0 ? <div className="empty"><div className="big">None yet.</div>{isReviewer ? `Click “Add ${label}”.` : "Nothing recorded."}</div> : (
+      {rows.length === 0 ? <div className="empty"><div className="big">None yet.</div>{canEdit ? `Click “Add ${label}”.` : "Nothing recorded."}</div> : (
         <div className="tablewrap">
           <table className="dtable">
-            <thead><tr>{columns.map((c) => <th key={c.k}>{c.l}</th>)}{isReviewer && <th></th>}</tr></thead>
+            <thead><tr>{columns.map((c) => <th key={c.k}>{c.l}</th>)}{canEdit && <th></th>}</tr></thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r._id}>
                   {columns.map((c) => <td key={c.k} className={c.type === "number" ? "mono" : ""}>{r[c.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</td>)}
-                  {isReviewer && <td style={{ whiteSpace: "nowrap" }}>
+                  {canEdit && <td style={{ whiteSpace: "nowrap" }}>
                     <button className="btn sm ghost" onClick={() => setEdit(r)}>Edit</button>
                     <button className="btn sm ghost" onClick={() => remove(r)} style={{ marginLeft: 6 }}>Delete</button>
                   </td>}
@@ -555,22 +604,28 @@ function changedFields(p) {
 }
 
 function ChangeRequests({ user, isReviewer, showToast }) {
+  const { role, companies } = useAuth();
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState("pending");
   useEffect(() => listenCfgProposals(setRows), []);
 
-  if (!isReviewer) return <div className="lockmsg">Change Requests are reviewed by the <b>General Counsel</b>. Your own proposals appear on the relevant data tab while they await approval.</div>;
+  const r = normalizeRole(role);
+  const isApprover = r === "gc" || r === "hol";
+  if (!isApprover) return <div className="lockmsg">Change Requests are approved by the <b>General Counsel</b> or a company&rsquo;s <b>Head of Legal</b>. Your own proposals appear on the relevant data tab while they await approval.</div>;
 
+  // An approver only sees the requests they may act on (GC: all; Head of Legal: their companies).
+  const mine = rows.filter((p) => canApprove(role, companies, p.company));
   const counts = {
-    pending: rows.filter((p) => p.status === "pending").length,
-    approved: rows.filter((p) => p.status === "approved").length,
-    rejected: rows.filter((p) => p.status === "rejected").length,
+    pending: mine.filter((p) => p.status === "pending").length,
+    approved: mine.filter((p) => p.status === "approved").length,
+    rejected: mine.filter((p) => p.status === "rejected").length,
   };
-  const list = rows.filter((p) => filter === "all" || p.status === filter);
+  const list = mine.filter((p) => filter === "all" || p.status === filter);
+  const meEmail = (user.email || "").toLowerCase();
 
   return (
     <>
-      <div className="lockmsg">Proposed changes to company data from Regional Counsel. Review the before/after, then approve (applies it live) or reject with a note. Every decision is audited.</div>
+      <div className="lockmsg">Proposed changes to company data, scoped to the companies you cover. Review the before/after, then approve (applies it live) or reject with a note. You cannot approve your own proposal. Every decision is audited.</div>
       <div className="statbar">
         <div className="stat"><div className="n">{counts.pending}</div><div className="l">Pending</div></div>
         <div className="stat"><div className="n" style={{ color: "var(--base)" }}>{counts.approved}</div><div className="l">Approved</div></div>
@@ -581,17 +636,18 @@ function ChangeRequests({ user, isReviewer, showToast }) {
           </select>
         </div>
       </div>
-      {list.length === 0 ? <div className="empty"><div className="big">Nothing {filter === "all" ? "here" : filter}.</div>Proposals from Regional Counsel land here for review.</div>
-        : list.map((p) => <ProposalCard key={p._id} p={p} user={user} showToast={showToast} />)}
+      {list.length === 0 ? <div className="empty"><div className="big">Nothing {filter === "all" ? "here" : filter}.</div>Proposals you can act on land here for review.</div>
+        : list.map((p) => <ProposalCard key={p._id} p={p} user={user} isGC={r === "gc"} meEmail={meEmail} showToast={showToast} />)}
     </>
   );
 }
 
-function ProposalCard({ p, user, showToast }) {
+function ProposalCard({ p, user, isGC, meEmail, showToast }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const created = p.createdAt?.toDate ? p.createdAt.toDate() : null;
   const fields = changedFields(p);
+  const selfProposed = p.proposerEmail === meEmail && !isGC; // separation of duties (GC is the backstop)
 
   const decide = async (status) => {
     setBusy(true);
@@ -605,6 +661,7 @@ function ProposalCard({ p, user, showToast }) {
       <div className="qhead">
         <span className={"qtype " + (p.action === "archive" ? "rejected" : "improve")}>{ACTION_LABEL[p.action] || p.action}</span>
         <span className="qtitle">{p.label || p.targetId || "—"}</span>
+        {p.company && <span className="chip mono">{p.company}</span>}
         <span className={"qstatus " + p.status}>{p.status}</span>
         <span className="qmeta">{p.proposerName || p.proposerEmail} · {created ? created.toLocaleDateString() : "—"}</span>
       </div>
@@ -630,11 +687,15 @@ function ProposalCard({ p, user, showToast }) {
           </div>
         )}
         {p.status === "pending" ? (
-          <div className="reviewact" style={{ marginTop: 10 }}>
-            <textarea placeholder="Decision note (optional)…" value={note} onChange={(e) => setNote(e.target.value)} />
-            <button className="btn primary sm" disabled={busy} onClick={() => decide("approved")}>Approve &amp; apply</button>
-            <button className="btn sm" disabled={busy} onClick={() => decide("rejected")}>Reject</button>
-          </div>
+          selfProposed ? (
+            <div className="hint" style={{ marginTop: 10 }}>You proposed this change, so you cannot approve it — another approver or the General Counsel must review it.</div>
+          ) : (
+            <div className="reviewact" style={{ marginTop: 10 }}>
+              <textarea placeholder="Decision note (optional)…" value={note} onChange={(e) => setNote(e.target.value)} />
+              <button className="btn primary sm" disabled={busy} onClick={() => decide("approved")}>Approve &amp; apply</button>
+              <button className="btn sm" disabled={busy} onClick={() => decide("rejected")}>Reject</button>
+            </div>
+          )
         ) : p.reviewNote ? (
           <div className="cpurpose" style={{ WebkitLineClamp: 99, fontStyle: "italic", marginTop: 8 }}>Note: {p.reviewNote}</div>
         ) : null}

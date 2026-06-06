@@ -339,6 +339,19 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.7 — **Group RBAC + company scoping BUILT**) — Replaced the 2-role model with four
+  group roles (owner decisions): **General Counsel** (super-admin, group), **Regional Counsel** (maker,
+  group), **Head of Legal** (approver+editor, per-company), **Country Counsel** (maker, per-company).
+  `allowlist` doc gains `companies` (`"all"` or entity-code array). Decisions implemented: (1) **GC-only**
+  user admin & company grants; (2) **company-scoped approval** — a change to Company X is approved by X's
+  Head of Legal or the GC; (3) **one role across many companies** (multi-company tickbox). Enforced in
+  `firestore.rules` (the boundary): `isGC`/`hasCompany`/`isApproverFor`/`isMakerFor`; entity create = GC,
+  edit/archive + subcollections = company approver; `cfg_proposals` carry `company`, scoped create +
+  scoped approve with **no self-approval** (GC backstop). UI: capability helpers in `lib/constants.js`,
+  company picker + scope in Team & Access, scoped Change Requests queue, role+companies surfaced via
+  `useAuth`. **Security notes flagged to owner:** (a) legacy `contributor` docs normalise to group-wide
+  Regional Counsel — GC should review/re-assign every user's role + companies after deploy; (b) rules
+  must be deployed for any of this to take effect. Build passes.
 - 2026-06-05 (v2.6 — **Maker-checker + role rename BUILT**) — (1) **Role rename:** central `roleLabel()`
   (`lib/constants.js`) — reviewer → *General Counsel*, contributor → *Regional Counsel* — applied to the
   role chip (`app/page.js`), Team & Access, and the invite email (`lib/invite.js`); stored role values
