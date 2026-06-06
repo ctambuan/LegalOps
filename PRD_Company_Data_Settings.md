@@ -9,9 +9,25 @@
 **Last updated:** see Change Log (Section 18)
 
 > Controlling record for the Company Data module. Every architectural, product, or scope change MUST be
-> reflected here and appended to the Change Log before it is adopted. A copy is to be kept in the
-> configured project Drive folder. AI-assisted outputs are working drafts subject to human review by
-> qualified [Company] counsel and do not constitute legal advice or a Legal Department position.
+> reflected here and appended to the Change Log before it is adopted. A copy is kept in the configured
+> project Drive folder. AI-assisted outputs are working drafts subject to human review by qualified
+> [Company] counsel and do not constitute legal advice or a Legal Department position.
+
+## PRD Maintenance Protocol (standing instruction — owner directive 2026-06-06)
+
+Whenever the owner says **"update PRD"**, the assistant MUST, in order:
+1. **Update this document** in the repository (`PRD_Company_Data_Settings.md`), including a new **Change Log**
+   entry (Section 18), and bump the version.
+2. **Publish the latest version to Google Drive** — the configured Workbench folder
+   (`DRIVE_FOLDER_ID = 1EUxfSoMhazorsUNEbSPSqruhukd3Nure`) — as the live copy.
+3. **Archive the previous Drive copy** into the Drive **Archived** subfolder
+   (`DRIVE_ARCHIVE_FOLDER_ID = 1kRaTNcs0wMnseEo7XKfXYZmbThMcoVG-`), date/version-stamped, so only the current
+   version sits in the Workbench folder.
+4. Treat the **latest version as the single source** for the next update.
+
+The repository file is the working source of truth; the Drive copy mirrors the latest at each "update PRD".
+If a Drive step cannot be completed automatically (connector capability/permissions), the assistant must say
+so and state the manual action required — never silently skip it.
 
 ---
 
@@ -375,6 +391,10 @@ proves too blunt — has cost); OCR for scanned PDFs (has cost). All flagged for
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.8 — **PRD Maintenance Protocol added**) — Owner directive: on every "update PRD", update
+  the repo PRD + Change Log + version, publish the latest to the Google Drive Workbench folder, archive the
+  prior Drive copy into the Archived subfolder, and use the latest as the source for the next update.
+  Documented at the top of this PRD and in `CLAUDE.md`.
 - 2026-06-06 (v3.7 — **PRD body synced to as-built**) — Rewrote Sections 1–17 to match the shipped system
   (the body had lagged the change log): status → BUILT & DEPLOYED; 4-role RBAC + company scope (§3); as-built
   data model incl. `cfg_*` overrides + policy chunks (§8); consumption hook surface (§9); GC-only direct
