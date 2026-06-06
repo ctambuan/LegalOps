@@ -211,6 +211,17 @@ function AddUserModal({ user, resend, existing, showToast, onClose }) {
 }
 
 /* --------------------------------- Entities --------------------------------- */
+// Group structure: each entity is classified relative to the group (led by the General Counsel),
+// so regional counsels can see and filter the holding(s) vs controlled / non-controlled subsidiaries.
+// Multiple holdings are allowed (groups commonly have more than one); classification is a legal
+// determination set per entity, never auto-assigned.
+const ENTITY_TYPES = [
+  { v: "holding", l: "Holding Company" },
+  { v: "controlled", l: "Controlled Subsidiary" },
+  { v: "non_controlled", l: "Non-Controlled Subsidiary" },
+];
+const typeLabel = (v) => ENTITY_TYPES.find((t) => t.v === v)?.l || "Unclassified";
+
 // Column configs for the three per-entity subtables (drives the generic SubTable + editor).
 const DIRECTOR_COLS = [
   { k: "name", l: "Name", req: true }, { k: "title", l: "Title" },
@@ -237,6 +248,7 @@ const PROFILE_FIELDS = [
 function Entities({ user, isReviewer, showToast }) {
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [showArchived, setShowArchived] = useState(false);
   const [sel, setSel] = useState(null);
   const [seeding, setSeeding] = useState(false);
@@ -254,8 +266,9 @@ function Entities({ user, isReviewer, showToast }) {
     const all = rows || [];
     const t = q.trim().toLowerCase();
     return all.filter((e) => (showArchived || e.status !== "archived")
+      && (typeFilter === "all" || (e.entityType || "") === (typeFilter === "unclassified" ? "" : typeFilter))
       && (!t || [e.name, e.code, e.jurisdiction, e.registrationNo].some((v) => String(v || "").toLowerCase().includes(t))));
-  }, [rows, q, showArchived]);
+  }, [rows, q, typeFilter, showArchived]);
 
   if (sel) {
     const entity = (rows || []).find((e) => e._id === sel);
@@ -273,11 +286,21 @@ function Entities({ user, isReviewer, showToast }) {
           {isReviewer && <button className="btn primary sm" disabled={seeding} onClick={seed}>{seeding ? "Loading…" : `Load ${ENTITIES.length} default entities`}</button>}
         </div>
       )}
+      {rows.length > 0 && (
+        <div className="lockmsg">The group entity register, shared across regional counsel and led by the General Counsel.
+          Classify each entity as a <b>Holding Company</b>, <b>Controlled Subsidiary</b> or <b>Non-Controlled Subsidiary</b>
+          — open an entity to manage its directors, lines of business and authorized signers.</div>
+      )}
       <div className="toolbar">
         <div className="search">
           <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
           <input placeholder="Search entities — name, code, jurisdiction…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="all">All classifications</option>
+          {ENTITY_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+          <option value="unclassified">Unclassified</option>
+        </select>
         <span className="chip">{list.length} entities</span>
         <label className="chip" style={{ cursor: "pointer" }}><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} style={{ marginRight: 6 }} />Show archived</label>
         {isReviewer && <button className="btn primary sm" onClick={() => setSel("__new__")} style={{ marginLeft: "auto" }}>+ Add entity</button>}
@@ -288,12 +311,13 @@ function Entities({ user, isReviewer, showToast }) {
       {list.length === 0 && rows.length > 0 ? <div className="empty"><div className="big">No matches.</div>Adjust your search.</div> : (
         <div className="tablewrap">
           <table className="dtable">
-            <thead><tr><th>Entity</th><th>Code</th><th>Jurisdiction</th><th>Registration</th><th>Status</th></tr></thead>
+            <thead><tr><th>Entity</th><th>Code</th><th>Classification</th><th>Jurisdiction</th><th>Registration</th><th>Status</th></tr></thead>
             <tbody>
               {list.map((e) => (
                 <tr key={e._id} onClick={() => setSel(e._id)} style={{ cursor: "pointer" }}>
                   <td><b>{e.name}</b></td>
                   <td className="mono">{e.code}</td>
+                  <td>{e.entityType ? <span className={"chip" + (e.entityType === "holding" ? " ok" : "")}>{typeLabel(e.entityType)}</span> : <span style={{ color: "var(--ink3)" }}>Unclassified</span>}</td>
                   <td>{e.jurisdiction || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
                   <td>{e.registrationNo ? `${e.registrationType || ""} ${e.registrationNo}`.trim() : <span style={{ color: "var(--ink3)" }}>—</span>}</td>
                   <td><span className={"chip" + (e.status === "archived" ? "" : " ok")}>{e.status || "active"}</span></td>
@@ -336,6 +360,7 @@ function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
       {t === "profile" && (
         <div style={{ maxWidth: 640 }}>
           <dl className="kv">
+            <div className="kvrow"><dt>Group classification</dt><dd>{entity.entityType ? <span className={"chip" + (entity.entityType === "holding" ? " ok" : "")}>{typeLabel(entity.entityType)}</span> : <span style={{ color: "var(--ink3)" }}>Unclassified</span>}</dd></div>
             {PROFILE_FIELDS.map((f) => (
               <div key={f.k} className="kvrow"><dt>{f.l}</dt><dd>{entity[f.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</dd></div>
             ))}
@@ -355,7 +380,8 @@ function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
 function EntityProfileModal({ user, showToast, editing, existing = [], onClose, onCreated }) {
   const [code, setCode] = useState(editing?.code || "");
   const [f, setF] = useState(() => {
-    const init = {}; PROFILE_FIELDS.forEach((x) => (init[x.k] = editing?.[x.k] || "")); return init;
+    const init = { entityType: editing?.entityType || "" };
+    PROFILE_FIELDS.forEach((x) => (init[x.k] = editing?.[x.k] || "")); return init;
   });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -383,6 +409,13 @@ function EntityProfileModal({ user, showToast, editing, existing = [], onClose, 
           <div className="field"><label>Entity code{editing ? " (fixed)" : ""}</label>
             <input value={code} disabled={!!editing} onChange={(e) => setCode(e.target.value)} placeholder="e.g. BSC" />
             {dup && <div className="hint" style={{ color: "var(--oxblood)" }}>That code already exists.</div>}
+          </div>
+          <div className="field"><label>Group classification</label>
+            <select value={f.entityType} onChange={set("entityType")}>
+              <option value="">Unclassified</option>
+              {ENTITY_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}
+            </select>
+            <div className="hint">Holding, controlled or non-controlled subsidiary — the group-structure view for regional counsel.</div>
           </div>
           {PROFILE_FIELDS.map((x) => (
             <div className="field" key={x.k}><label>{x.l}{x.req ? "" : " (optional)"}</label>

@@ -339,6 +339,11 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.5) — **Group structure on entities.** Positioned as a group-level register led by the
+  General Counsel and shared across regional counsel. Added an `entityType` classification per entity —
+  Holding Company / Controlled Subsidiary / Non-Controlled Subsidiary (multiple holdings allowed;
+  classification is set per entity, never auto-assigned) — shown on the profile, as a list column, and as
+  a filter (`app/CompanyData.js`). Build passes.
 - 2026-06-05 (v2.4 — **Phase 1 / Records (Entities) BUILT**) — Shipped the Entities area and the
   consumption layer: `cfg_entities` + Directors/Lines-of-Business/Authorized-Signers subcollections
   (`lib/data.js`), `useCompanyData()` with seed fallback (`lib/companyData.js`), `firestore.rules` for all
