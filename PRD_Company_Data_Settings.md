@@ -339,6 +339,17 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.8 — **Approval Policy + DocGen rewire BUILT → Phase 1 feature-complete**) — Editable
+  **thresholds** (`cfg_thresholds/bands`) and **per-department routing** (`cfg_approvals`) under Company
+  Data → Approval Policy, GC-only (rules). Refactored the pure logic to be **band-key based**
+  (`valueBucketKey`/`bucketLabel`/`approverCell`) so editing threshold numbers can never desync routing;
+  `businessApprovers` now computes the band from the USD amount + live thresholds. The **Document Number
+  Generator** (`Form` + `createDocNumber`) reads approvals + thresholds live via `useCompanyData()`; the
+  approval matrix was **removed from DocGen Settings** (which now points to Company Data and keeps only
+  default-PIC + sequence starts). Threshold edits show a consequence confirmation; the full historical
+  impact preview remains OI5. Build passes. **Phase 1 is now feature-complete** (User Management;
+  Records/Entities + group classification; maker-checker; group RBAC + company scoping; Approval Policy +
+  consumption layer) — pending the rules deploy and a live end-to-end test before go-live.
 - 2026-06-05 (v2.7 — **Group RBAC + company scoping BUILT**) — Replaced the 2-role model with four
   group roles (owner decisions): **General Counsel** (super-admin, group), **Regional Counsel** (maker,
   group), **Head of Legal** (approver+editor, per-company), **Country Counsel** (maker, per-company).

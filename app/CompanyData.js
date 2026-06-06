@@ -10,10 +10,11 @@ import {
   listenCfgEntities, seedCfgEntities, addCfgEntity, saveCfgEntity, archiveCfgEntity,
   listenEntitySub, addEntitySub, saveEntitySub, deleteEntitySub,
   listenCfgProposals, proposeChange, decideCfgProposal,
+  listenCfgThresholds, saveCfgThresholds, listenCfgApprovals, saveCfgApproval, seedCfgApprovals,
 } from "../lib/data";
-import { ENTITIES } from "../lib/docgen";
+import { ENTITIES, DEPARTMENTS, DEFAULT_THRESHOLDS, bucketLabel, approverCell } from "../lib/docgen";
 import {
-  ROLES, roleLabel, normalizeRole, inScope,
+  ROLES, roleLabel, normalizeRole,
   canApprove, canEditEntity, canProposeEntity, canCreateEntity, canProposeNewEntity,
 } from "../lib/constants";
 import { useCompanyData } from "../lib/companyData";
@@ -23,6 +24,7 @@ import { buildInvite, sendInviteViaGmail } from "../lib/invite";
 export default function CompanyData({ tab, user, isReviewer, showToast }) {
   if (tab === "team") return <TeamAccess user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "entities") return <Entities user={user} isReviewer={isReviewer} showToast={showToast} />;
+  if (tab === "approval") return <ApprovalPolicy user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "changes") return <ChangeRequests user={user} isReviewer={isReviewer} showToast={showToast} />;
   return <Planned tab={tab} />;
 }
@@ -699,6 +701,146 @@ function ProposalCard({ p, user, isGC, meEmail, showToast }) {
         ) : p.reviewNote ? (
           <div className="cpurpose" style={{ WebkitLineClamp: 99, fontStyle: "italic", marginTop: 8 }}>Note: {p.reviewNote}</div>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Approval Policy ------------------------------ */
+// Group-level governance: the USD threshold bands + the per-department approver routing the
+// Document Number Generator reads live. GC edits (rules: cfg_thresholds/cfg_approvals are GC-only).
+const fmtUsd = (n) => "USD " + Number(n || 0).toLocaleString("en-US");
+
+function ApprovalPolicy({ user, isReviewer, showToast }) {
+  const [thr, setThr] = useState(null);     // cfg doc or null (→ defaults)
+  const [rows, setRows] = useState([]);     // cfg_approvals overrides (by code)
+  const [editDept, setEditDept] = useState(null);
+  useEffect(() => listenCfgThresholds(setThr), []);
+  useEffect(() => listenCfgApprovals(setRows), []);
+
+  const thresholds = thr && thr.low != null ? { low: Number(thr.low), high: Number(thr.high) } : DEFAULT_THRESHOLDS;
+  const overridesByName = useMemo(() => {
+    const m = {}; rows.forEach((r) => { m[r.department] = { admin: r.admin, low: r.low, mid: r.mid, high: r.high }; }); return m;
+  }, [rows]);
+  const seeded = rows.length > 0;
+
+  const seed = async () => {
+    try { await seedCfgApprovals(DEPARTMENTS, user); showToast(`Loaded ${DEPARTMENTS.length} department routes`); }
+    catch (e) { console.error(e); showToast(e.message || "Could not load defaults"); }
+  };
+
+  const bandCols = [
+    { k: "admin", l: "Administrative" },
+    { k: "low", l: `≤ ${fmtUsd(thresholds.low)}` },
+    { k: "mid", l: `${fmtUsd(thresholds.low)} – ${fmtUsd(thresholds.high)}` },
+    { k: "high", l: `≥ ${fmtUsd(thresholds.high)} / Unbudgeted` },
+  ];
+
+  return (
+    <>
+      <div className="lockmsg">The approval matrix the Document Number Generator reads live: the USD thresholds and the
+        Business Approver for each department by document value. {isReviewer ? "Editable by the General Counsel." : "Read-only for your role — the General Counsel maintains it."}</div>
+
+      <ThresholdEditor thresholds={thresholds} isReviewer={isReviewer} user={user} showToast={showToast} />
+
+      <div className="sectlabel"><span className="t">Approver routing</span><span className="h">— Business Approver by department &amp; document value</span></div>
+      {!seeded && (
+        <div className="lockmsg" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <span>Using the bundled workbook defaults. {isReviewer ? "Load them in to edit." : "The General Counsel can make these editable."}</span>
+          {isReviewer && <button className="btn primary sm" onClick={seed}>Load {DEPARTMENTS.length} default routes</button>}
+        </div>
+      )}
+      <div className="tablewrap">
+        <table className="dtable">
+          <thead><tr><th>Department</th>{bandCols.map((c) => <th key={c.k}>{c.l}</th>)}{isReviewer && <th></th>}</tr></thead>
+          <tbody>
+            {DEPARTMENTS.map((d) => {
+              const cell = approverCell(d.name, overridesByName) || {};
+              return (
+                <tr key={d.code}>
+                  <td><b>{d.name}</b> <span className="chip" style={{ marginLeft: 4 }}>{d.code}</span></td>
+                  {bandCols.map((c) => <td key={c.k}>{cell[c.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</td>)}
+                  {isReviewer && <td><button className="btn sm ghost" onClick={() => setEditDept({ d, cell })}>Edit</button></td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {editDept && <ApproverEditModal dept={editDept.d} cell={editDept.cell} bandCols={bandCols} user={user} showToast={showToast} onClose={() => setEditDept(null)} />}
+    </>
+  );
+}
+
+function ThresholdEditor({ thresholds, isReviewer, user, showToast }) {
+  const [low, setLow] = useState(thresholds.low);
+  const [high, setHigh] = useState(thresholds.high);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setLow(thresholds.low); setHigh(thresholds.high); }, [thresholds.low, thresholds.high]);
+
+  const dirty = Number(low) !== Number(thresholds.low) || Number(high) !== Number(thresholds.high);
+  const valid = Number(low) > 0 && Number(high) > Number(low);
+
+  const save = async () => {
+    if (!confirm(`Change approval thresholds to ${fmtUsd(low)} and ${fmtUsd(high)}?\n\nThis changes which approver is routed for ALL future agreements. Existing document records keep the approver recorded when they were generated.`)) return;
+    setBusy(true);
+    try { await saveCfgThresholds({ low, high }, user); showToast("Thresholds updated"); }
+    catch (e) { console.error(e); showToast(e.message || "Save failed — General Counsel only"); }
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <div className="sectlabel"><span className="t">Value thresholds (USD / annum)</span><span className="h">— the bands that route agreement approvers</span></div>
+      <div className="two" style={{ maxWidth: 560 }}>
+        <div className="field"><label>Lower band ceiling</label>
+          <input type="number" disabled={!isReviewer} value={low} onChange={(e) => setLow(e.target.value)} /></div>
+        <div className="field"><label>Upper band ceiling</label>
+          <input type="number" disabled={!isReviewer} value={high} onChange={(e) => setHigh(e.target.value)} /></div>
+      </div>
+      <div className="hint">≤ {fmtUsd(low)} → lower · {fmtUsd(low)}–{fmtUsd(high)} → middle · ≥ {fmtUsd(high)} (or unbudgeted) → highest.</div>
+      {isReviewer && !valid && <div className="hint" style={{ color: "var(--oxblood)" }}>Upper ceiling must be greater than the lower, and both above zero.</div>}
+      {isReviewer && dirty && valid && (
+        <div style={{ marginTop: 8 }}><button className="btn primary sm" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save thresholds"}</button></div>
+      )}
+    </>
+  );
+}
+
+function ApproverEditModal({ dept, cell, bandCols, user, showToast, onClose }) {
+  const [f, setF] = useState({ admin: cell.admin || "", low: cell.low || "", mid: cell.mid || "", high: cell.high || "" });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await saveCfgApproval(dept.code, { department: dept.name, departmentCode: dept.code, ...f }, user);
+      showToast(`${dept.name} routing saved`); onClose();
+    } catch (e) { console.error(e); showToast(e.message || "Save failed — General Counsel only"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">Approver routing · {dept.code}</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{dept.name}</div>
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          {bandCols.map((c) => (
+            <div className="field" key={c.k}><label>{c.l}</label>
+              <input value={f[c.k]} onChange={set(c.k)} placeholder="Approver name(s)" /></div>
+          ))}
+          <div className="hint">Leave a cell blank to fall back to the workbook default for that band.</div>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save routing"}</button>
+        </div>
       </div>
     </div>
   );
