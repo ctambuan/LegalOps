@@ -339,6 +339,14 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.9 — **Pre-deploy security review pass**) — Adversarial review of the rules + maker-checker
+  + RBAC + DocGen rewire. Fixes: bound `cfg_proposals.company == targetId` for update/archive (no
+  cross-company misrouting); auto-strip the legacy `docgen_settings.approvers` field on save (`deleteField`);
+  legacy `contributor` (the original owner) normalises to **GC** in `lib/constants` + `firestore.rules`
+  (no bootstrap lockout). Owner decisions: F1 (group-wide reads) accepted for Phase 1 — revisit before the
+  Policy Library; F3 (rule read-budget) is within limits via Firestore's same-document caching (optional
+  Playground check). Deploy gate: `firebase deploy --only firestore:rules`, seed defaults, verify the
+  Team & Access roster, smoke-test end-to-end. Build passes.
 - 2026-06-05 (v2.8 — **Approval Policy + DocGen rewire BUILT → Phase 1 feature-complete**) — Editable
   **thresholds** (`cfg_thresholds/bands`) and **per-department routing** (`cfg_approvals`) under Company
   Data → Approval Policy, GC-only (rules). Refactored the pure logic to be **band-key based**
