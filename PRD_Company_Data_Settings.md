@@ -339,6 +339,16 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.6 — **Maker-checker + role rename BUILT**) — (1) **Role rename:** central `roleLabel()`
+  (`lib/constants.js`) — reviewer → *General Counsel*, contributor → *Regional Counsel* — applied to the
+  role chip (`app/page.js`), Team & Access, and the invite email (`lib/invite.js`); stored role values
+  unchanged. (2) **Maker-checker for entities:** `cfg_proposals` data layer (`listenCfgProposals`,
+  `proposeChange`, `decideCfgProposal` which applies the change on approve) in `lib/data.js`; Regional
+  Counsel now see *Propose entity* / *Propose edit* (submit for approval) while the General Counsel edits
+  directly; a **Change Requests** queue (`app/CompanyData.js`) shows before/after diffs with approve
+  (applies live) / reject + note; pending banners and a per-row "pending" marker on the Entities tab.
+  Scope: entity profile create/update/archive via the queue (subcollections + Approval route through the
+  same mechanism as they are built). Build passes.
 - 2026-06-05 (v2.5) — **Group structure on entities.** Positioned as a group-level register led by the
   General Counsel and shared across regional counsel. Added an `entityType` classification per entity —
   Holding Company / Controlled Subsidiary / Non-Controlled Subsidiary (multiple holdings allowed;

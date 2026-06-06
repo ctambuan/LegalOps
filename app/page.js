@@ -8,7 +8,7 @@ import {
   createProposal, transitionProposal, logExport, seedClausesViaApi,
   calibrateClauseField, commitCalibrationToRepo,
 } from "../lib/data";
-import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION } from "../lib/constants";
+import { TIERS, CTYPES, CLASSES, JURISDICTIONS, PLAYBOOK_VERSION, roleLabel } from "../lib/constants";
 import { COMPANY_LABEL, AI_ASSIST_ENABLED, DRIVE_UPLOAD_ENABLED, DRIVE_MANAGE_ENABLED, DRIVE_FOLDER_ID, PLAYBOOK_VERSION_TAG } from "../lib/config";
 import DriveArchive from "./DriveArchive";
 import { exportMaster } from "../lib/exportDocx";
@@ -207,7 +207,7 @@ export default function Page() {
         <div className="who">
           <div>
             <div className="nm">{user.email}</div>
-            <div className="rl">{role}</div>
+            <div className="rl">{roleLabel(role)}</div>
           </div>
           <button className="btn sm ghost" onClick={logout}>Sign out</button>
         </div>

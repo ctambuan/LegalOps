@@ -9,14 +9,17 @@ import {
   listenAllowlist, addAllowlistUser, updateAllowlistRole, removeAllowlistUser,
   listenCfgEntities, seedCfgEntities, addCfgEntity, saveCfgEntity, archiveCfgEntity,
   listenEntitySub, addEntitySub, saveEntitySub, deleteEntitySub,
+  listenCfgProposals, proposeChange, decideCfgProposal,
 } from "../lib/data";
 import { ENTITIES } from "../lib/docgen";
+import { roleLabel } from "../lib/constants";
 import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL } from "../lib/config";
 import { buildInvite, sendInviteViaGmail } from "../lib/invite";
 
 export default function CompanyData({ tab, user, isReviewer, showToast }) {
   if (tab === "team") return <TeamAccess user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "entities") return <Entities user={user} isReviewer={isReviewer} showToast={showToast} />;
+  if (tab === "changes") return <ChangeRequests user={user} isReviewer={isReviewer} showToast={showToast} />;
   return <Planned tab={tab} />;
 }
 
@@ -44,21 +47,21 @@ function TeamAccess({ user, isReviewer, showToast }) {
   }, [rows, q]);
 
   if (!isReviewer) {
-    return <div className="lockmsg">Team &amp; Access is restricted to the <b>Head of Legal</b>. Ask them to add or change a team member&rsquo;s access.</div>;
+    return <div className="lockmsg">Team &amp; Access is restricted to the <b>General Counsel</b>. Ask them to add or change a team member&rsquo;s access.</div>;
   }
 
   const changeRole = async (r, role) => {
     if (r.email === me) { showToast("You cannot change your own role."); return; }
-    if (r.role === "reviewer" && role !== "reviewer" && reviewerCount <= 1) { showToast("Cannot demote the last Head of Legal."); return; }
+    if (r.role === "reviewer" && role !== "reviewer" && reviewerCount <= 1) { showToast("Cannot demote the last General Counsel."); return; }
     setBusy(r.email);
-    try { await updateAllowlistRole(r.email, role, user); showToast(`${r.email} is now ${role === "reviewer" ? "Head of Legal" : "Team Member"}`); }
+    try { await updateAllowlistRole(r.email, role, user); showToast(`${r.email} is now ${roleLabel(role)}`); }
     catch (e) { console.error(e); showToast(e.message || "Could not change role"); }
     setBusy("");
   };
 
   const remove = async (r) => {
     if (r.email === me) { showToast("You cannot remove your own account."); return; }
-    if (r.role === "reviewer" && reviewerCount <= 1) { showToast("Cannot remove the last Head of Legal."); return; }
+    if (r.role === "reviewer" && reviewerCount <= 1) { showToast("Cannot remove the last General Counsel."); return; }
     if (!confirm(`Remove access for ${r.email}? They will be blocked at next sign-in.`)) return;
     setBusy(r.email);
     try { await removeAllowlistUser(r.email, user); showToast(`Access removed for ${r.email}`); }
@@ -99,8 +102,8 @@ function TeamAccess({ user, isReviewer, showToast }) {
                     <td>
                       <select value={r.role || "contributor"} disabled={self || busy === r.email}
                         onChange={(e) => changeRole(r, e.target.value)} style={{ padding: "3px 6px", fontSize: 12 }}>
-                        <option value="contributor">Team Member</option>
-                        <option value="reviewer">Head of Legal</option>
+                        <option value="contributor">Regional Counsel</option>
+                        <option value="reviewer">General Counsel</option>
                       </select>
                     </td>
                     <td><span className={"chip" + (r.status === "active" ? " ok" : "")}>{r.status || "invited"}</span></td>
@@ -184,8 +187,8 @@ function AddUserModal({ user, resend, existing, showToast, onClose }) {
               <input value={displayName} onChange={(ev) => setDisplayName(ev.target.value)} placeholder="e.g. Jane Counsel" /></div>
             <div className="field"><label>Role</label>
               <select value={role} onChange={(ev) => setRole(ev.target.value)}>
-                <option value="contributor">Team Member (Contributor)</option>
-                <option value="reviewer">Head of Legal (Reviewer)</option>
+                <option value="contributor">Regional Counsel</option>
+                <option value="reviewer">General Counsel</option>
               </select></div>
           </div>
           {!resend && <div className="field"><label>Personal note (optional)</label>
@@ -253,7 +256,16 @@ function Entities({ user, isReviewer, showToast }) {
   const [sel, setSel] = useState(null);
   const [seeding, setSeeding] = useState(false);
 
+  const [proposals, setProposals] = useState([]);
   useEffect(() => listenCfgEntities(setRows), []);
+  useEffect(() => listenCfgProposals(setProposals), []);
+
+  const myEmail = (user.email || "").toLowerCase();
+  const pendingByTarget = useMemo(() => {
+    const m = {}; proposals.forEach((p) => { if (p.status === "pending" && p.targetId) m[p.targetId] = true; }); return m;
+  }, [proposals]);
+  const myPending = proposals.filter((p) => p.status === "pending" && p.proposerEmail === myEmail).length;
+  const reviewPending = proposals.filter((p) => p.status === "pending").length;
 
   const seed = async () => {
     setSeeding(true);
@@ -289,8 +301,11 @@ function Entities({ user, isReviewer, showToast }) {
       {rows.length > 0 && (
         <div className="lockmsg">The group entity register, shared across regional counsel and led by the General Counsel.
           Classify each entity as a <b>Holding Company</b>, <b>Controlled Subsidiary</b> or <b>Non-Controlled Subsidiary</b>
-          — open an entity to manage its directors, lines of business and authorized signers.</div>
+          — open an entity to manage its directors, lines of business and authorized signers.
+          {isReviewer ? " You can edit directly; Regional Counsel changes arrive as Change Requests for your approval." : " Your additions and edits are submitted to the General Counsel for approval."}</div>
       )}
+      {isReviewer && reviewPending > 0 && <div className="lockmsg" style={{ borderColor: "var(--esc)" }}>{reviewPending} change request{reviewPending > 1 ? "s" : ""} await your review — open <b>Change Requests</b>.</div>}
+      {!isReviewer && myPending > 0 && <div className="lockmsg">You have {myPending} proposal{myPending > 1 ? "s" : ""} awaiting General Counsel approval.</div>}
       <div className="toolbar">
         <div className="search">
           <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
@@ -303,10 +318,10 @@ function Entities({ user, isReviewer, showToast }) {
         </select>
         <span className="chip">{list.length} entities</span>
         <label className="chip" style={{ cursor: "pointer" }}><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} style={{ marginRight: 6 }} />Show archived</label>
-        {isReviewer && <button className="btn primary sm" onClick={() => setSel("__new__")} style={{ marginLeft: "auto" }}>+ Add entity</button>}
+        <button className="btn primary sm" onClick={() => setSel("__new__")} style={{ marginLeft: "auto" }}>{isReviewer ? "+ Add entity" : "+ Propose entity"}</button>
       </div>
 
-      {sel === "__new__" && <EntityProfileModal user={user} showToast={showToast} existing={rows} onClose={() => setSel(null)} onCreated={(id) => setSel(id)} />}
+      {sel === "__new__" && <EntityProfileModal user={user} isReviewer={isReviewer} showToast={showToast} existing={rows} onClose={() => setSel(null)} onCreated={(id) => setSel(id)} />}
 
       {list.length === 0 && rows.length > 0 ? <div className="empty"><div className="big">No matches.</div>Adjust your search.</div> : (
         <div className="tablewrap">
@@ -317,7 +332,7 @@ function Entities({ user, isReviewer, showToast }) {
                 <tr key={e._id} onClick={() => setSel(e._id)} style={{ cursor: "pointer" }}>
                   <td><b>{e.name}</b></td>
                   <td className="mono">{e.code}</td>
-                  <td>{e.entityType ? <span className={"chip" + (e.entityType === "holding" ? " ok" : "")}>{typeLabel(e.entityType)}</span> : <span style={{ color: "var(--ink3)" }}>Unclassified</span>}</td>
+                  <td>{e.entityType ? <span className={"chip" + (e.entityType === "holding" ? " ok" : "")}>{typeLabel(e.entityType)}</span> : <span style={{ color: "var(--ink3)" }}>Unclassified</span>}{pendingByTarget[e._id] && <span className="chip" style={{ marginLeft: 6 }} title="A change request is pending for this entity">pending</span>}</td>
                   <td>{e.jurisdiction || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
                   <td>{e.registrationNo ? `${e.registrationType || ""} ${e.registrationNo}`.trim() : <span style={{ color: "var(--ink3)" }}>—</span>}</td>
                   <td><span className={"chip" + (e.status === "archived" ? "" : " ok")}>{e.status || "active"}</span></td>
@@ -365,8 +380,8 @@ function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
               <div key={f.k} className="kvrow"><dt>{f.l}</dt><dd>{entity[f.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</dd></div>
             ))}
           </dl>
-          {isReviewer && <button className="btn primary sm" onClick={() => setEditProfile(true)}>Edit profile</button>}
-          {editProfile && <EntityProfileModal user={user} showToast={showToast} editing={entity} onClose={() => setEditProfile(false)} />}
+          <button className="btn primary sm" onClick={() => setEditProfile(true)}>{isReviewer ? "Edit profile" : "Propose edit"}</button>
+          {editProfile && <EntityProfileModal user={user} isReviewer={isReviewer} showToast={showToast} editing={entity} onClose={() => setEditProfile(false)} />}
         </div>
       )}
       {t === "directors" && <SubTable entityId={entity._id} sub="directors" columns={DIRECTOR_COLS} label="director" isReviewer={isReviewer} user={user} showToast={showToast} />}
@@ -377,7 +392,8 @@ function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
 }
 
 // Create or edit an entity profile (code is the doc id — editable only on create).
-function EntityProfileModal({ user, showToast, editing, existing = [], onClose, onCreated }) {
+// Regional Counsel submit a proposal for the General Counsel to approve; the GC saves directly.
+function EntityProfileModal({ user, isReviewer, showToast, editing, existing = [], onClose, onCreated }) {
   const [code, setCode] = useState(editing?.code || "");
   const [f, setF] = useState(() => {
     const init = { entityType: editing?.entityType || "" };
@@ -391,8 +407,20 @@ function EntityProfileModal({ user, showToast, editing, existing = [], onClose, 
   const save = async () => {
     setBusy(true);
     try {
-      if (editing) { await saveCfgEntity(editing._id, f, user); showToast("Entity updated"); onClose(); }
-      else { const id = await addCfgEntity({ ...f, code: code.trim() }, user); showToast("Entity added"); onClose(); onCreated?.(id); }
+      if (isReviewer) {
+        if (editing) { await saveCfgEntity(editing._id, f, user); showToast("Entity updated"); onClose(); }
+        else { const id = await addCfgEntity({ ...f, code: code.trim() }, user); showToast("Entity added"); onClose(); onCreated?.(id); }
+      } else {
+        if (editing) {
+          const before = { entityType: editing.entityType || "" };
+          PROFILE_FIELDS.forEach((x) => (before[x.k] = editing[x.k] || ""));
+          await proposeChange({ domain: "entity", action: "update", targetId: editing._id, label: editing.name, before, after: f }, user);
+        } else {
+          await proposeChange({ domain: "entity", action: "create", label: f.name, after: { ...f, code: code.trim() } }, user);
+        }
+        showToast("Submitted for General Counsel approval");
+        onClose();
+      }
     } catch (e) { console.error(e); showToast(e.message || "Save failed"); }
     setBusy(false);
   };
@@ -424,7 +452,8 @@ function EntityProfileModal({ user, showToast, editing, existing = [], onClose, 
         </div>
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Saving…" : editing ? "Save" : "Add entity"}</button>
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>
+            {busy ? "Working…" : isReviewer ? (editing ? "Save" : "Add entity") : "Submit for approval"}</button>
         </div>
       </div>
     </div>
@@ -505,6 +534,110 @@ function SubEditModal({ entityId, sub, columns, label, row, user, showToast, onC
           <button className="btn ghost" onClick={onClose}>Cancel</button>
           <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Saving…" : "Save"}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Change Requests ------------------------------ */
+const ACTION_LABEL = { create: "New entity", update: "Edit entity", archive: "Archive entity" };
+const FIELD_LABEL = { code: "Code", entityType: "Classification", ...Object.fromEntries(PROFILE_FIELDS.map((f) => [f.k, f.l])) };
+const fieldVal = (k, v) => (k === "entityType" ? typeLabel(v) : (v || "—"));
+
+function changedFields(p) {
+  const a = p.after || {}, b = p.before || {};
+  if (p.action === "create") return Object.keys(a).filter((k) => a[k] !== "" && a[k] != null).map((k) => ({ k, before: null, after: a[k] }));
+  if (p.action === "update") {
+    const keys = Array.from(new Set([...Object.keys(b), ...Object.keys(a)]));
+    return keys.filter((k) => (b[k] || "") !== (a[k] || "")).map((k) => ({ k, before: b[k], after: a[k] }));
+  }
+  return [];
+}
+
+function ChangeRequests({ user, isReviewer, showToast }) {
+  const [rows, setRows] = useState([]);
+  const [filter, setFilter] = useState("pending");
+  useEffect(() => listenCfgProposals(setRows), []);
+
+  if (!isReviewer) return <div className="lockmsg">Change Requests are reviewed by the <b>General Counsel</b>. Your own proposals appear on the relevant data tab while they await approval.</div>;
+
+  const counts = {
+    pending: rows.filter((p) => p.status === "pending").length,
+    approved: rows.filter((p) => p.status === "approved").length,
+    rejected: rows.filter((p) => p.status === "rejected").length,
+  };
+  const list = rows.filter((p) => filter === "all" || p.status === filter);
+
+  return (
+    <>
+      <div className="lockmsg">Proposed changes to company data from Regional Counsel. Review the before/after, then approve (applies it live) or reject with a note. Every decision is audited.</div>
+      <div className="statbar">
+        <div className="stat"><div className="n">{counts.pending}</div><div className="l">Pending</div></div>
+        <div className="stat"><div className="n" style={{ color: "var(--base)" }}>{counts.approved}</div><div className="l">Approved</div></div>
+        <div className="stat"><div className="n" style={{ color: "var(--proh)" }}>{counts.rejected}</div><div className="l">Rejected</div></div>
+        <div style={{ marginLeft: "auto" }}>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            {["pending", "approved", "rejected", "all"].map((f) => <option key={f} value={f}>{f[0].toUpperCase() + f.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+      {list.length === 0 ? <div className="empty"><div className="big">Nothing {filter === "all" ? "here" : filter}.</div>Proposals from Regional Counsel land here for review.</div>
+        : list.map((p) => <ProposalCard key={p._id} p={p} user={user} showToast={showToast} />)}
+    </>
+  );
+}
+
+function ProposalCard({ p, user, showToast }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const created = p.createdAt?.toDate ? p.createdAt.toDate() : null;
+  const fields = changedFields(p);
+
+  const decide = async (status) => {
+    setBusy(true);
+    try { await decideCfgProposal(p, status, note, user); showToast(status === "approved" ? "Approved & applied" : "Rejected"); }
+    catch (e) { console.error(e); showToast(e.message || "Could not record decision"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="qcard">
+      <div className="qhead">
+        <span className={"qtype " + (p.action === "archive" ? "rejected" : "improve")}>{ACTION_LABEL[p.action] || p.action}</span>
+        <span className="qtitle">{p.label || p.targetId || "—"}</span>
+        <span className={"qstatus " + p.status}>{p.status}</span>
+        <span className="qmeta">{p.proposerName || p.proposerEmail} · {created ? created.toLocaleDateString() : "—"}</span>
+      </div>
+      <div className="qbody open">
+        {p.action === "archive" ? (
+          <div className="cpurpose" style={{ WebkitLineClamp: 99, color: "var(--ink)" }}>Proposes to archive this entity (hidden from pickers, retained for references).</div>
+        ) : fields.length === 0 ? (
+          <div className="hint">No field changes detected.</div>
+        ) : (
+          <div className="tablewrap">
+            <table className="dtable">
+              <thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead>
+              <tbody>
+                {fields.map(({ k, before, after }) => (
+                  <tr key={k}>
+                    <td>{FIELD_LABEL[k] || k}</td>
+                    <td style={{ color: "var(--ink3)" }}>{p.action === "create" ? "—" : fieldVal(k, before)}</td>
+                    <td className="add">{fieldVal(k, after)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {p.status === "pending" ? (
+          <div className="reviewact" style={{ marginTop: 10 }}>
+            <textarea placeholder="Decision note (optional)…" value={note} onChange={(e) => setNote(e.target.value)} />
+            <button className="btn primary sm" disabled={busy} onClick={() => decide("approved")}>Approve &amp; apply</button>
+            <button className="btn sm" disabled={busy} onClick={() => decide("rejected")}>Reject</button>
+          </div>
+        ) : p.reviewNote ? (
+          <div className="cpurpose" style={{ WebkitLineClamp: 99, fontStyle: "italic", marginTop: 8 }}>Note: {p.reviewNote}</div>
+        ) : null}
       </div>
     </div>
   );
