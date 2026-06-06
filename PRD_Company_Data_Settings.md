@@ -339,6 +339,11 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.2 — **Agent roster consolidated to 7**) — Owner-directed: **Document Processing Agent**
+  (draft / review / standard-docs / approval-signing routing in one), Corporate Secretarial, Compliance &
+  Licence Watch, Legal Risk Analyst, **Report Generator**, Legal Intake Triage, and **Ask Legal** (general
+  Q&A grounded in anything stored in the dashboard, with sources — absorbs Policy & Playbook Q&A). Roster-
+  only change; UI/data/server unchanged. Build passes.
 - 2026-06-06 (v3.1 — **Agents → fixed preset roster + cost discipline**) — Reworked Agents from
   free-create to a **fixed roster of 10 presets** defined in `lib/agentTemplates.js` (Contract Drafting,
   Redline Reviewer, NDA/Std-Doc Drafter, Corporate Secretarial, Approval & Signing Router, Compliance &
