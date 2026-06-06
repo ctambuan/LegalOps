@@ -12,7 +12,9 @@ import {
   listenCfgProposals, proposeChange, decideCfgProposal,
   listenCfgThresholds, saveCfgThresholds, listenCfgApprovals, saveCfgApproval, seedCfgApprovals,
   listenCfgAgents, saveCfgAgentOverride, resetCfgAgent,
+  listenCfgPolicies, addCfgPolicy, updateCfgPolicyMeta, archiveCfgPolicy,
 } from "../lib/data";
+import { retrievePolicyContext } from "../lib/policy";
 import { ENTITIES, DEPARTMENTS, DEFAULT_THRESHOLDS, bucketLabel, approverCell } from "../lib/docgen";
 import {
   ROLES, roleLabel, normalizeRole,
@@ -898,9 +900,8 @@ function AiKnowledge({ user, isReviewer, showToast }) {
         ))}
       </div>
 
-      <div className="sectlabel" style={{ marginTop: 22 }}><span className="t">Policy Library</span><span className="h">— Phase 3</span></div>
-      <div className="tbd"><div className="tbdtag">Planned · Phase 3</div><div className="big">Policy Library (RAG)</div>
-        <p>Upload policies (group-wide or per company); agents will retrieve and cite them in their answers. See <code>PRD_Company_Data_Settings.md</code> §9 &amp; §11.</p></div>
+      <div className="sectlabel" style={{ marginTop: 22 }}><span className="t">Policy Library</span><span className="h">— knowledge base for “Ask Legal”</span></div>
+      <PolicyLibrary user={user} isReviewer={isReviewer} showToast={showToast} />
 
       {modal?.mode === "try" && <RunAgentModal agent={effectiveAgent(modal.preset, modal.override)} showToast={showToast} onClose={() => setModal(null)} />}
       {modal?.mode === "tune" && <TuneAgentModal user={user} preset={modal.preset} override={modal.override} showToast={showToast} onClose={() => setModal(null)} />}
@@ -988,14 +989,24 @@ function TuneAgentModal({ user, preset, override, showToast, onClose }) {
 }
 
 function RunAgentModal({ agent, showToast, onClose }) {
+  const { role, companies } = useAuth();
   const [q, setQ] = useState("");
   const [out, setOut] = useState("");
+  const [sources, setSources] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const run = async () => {
-    setBusy(true); setErr(""); setOut("");
-    try { setOut(await callAssist("agent", { instruction: agent.instruction, question: q, model: agent.model, maxTokens: agent.maxTokens, thinking: agent.thinking })); }
-    catch (e) { setErr(e.message || "Failed"); }
+    setBusy(true); setErr(""); setOut(""); setSources([]);
+    try {
+      let context = "", src = [];
+      if (agent.retrieves) {
+        // Scope-aware retrieval from the Policy Library (client-side, lexical) — grounds the answer.
+        const r = await retrievePolicyContext({ role, companies }, q);
+        context = r.context; src = r.sources;
+      }
+      const answer = await callAssist("agent", { instruction: agent.instruction, question: q, model: agent.model, maxTokens: agent.maxTokens, thinking: agent.thinking, context });
+      setOut(answer); setSources(src);
+    } catch (e) { setErr(e.message || "Failed"); }
     setBusy(false);
   };
   return (
@@ -1008,7 +1019,9 @@ function RunAgentModal({ agent, showToast, onClose }) {
           <button className="mclose" onClick={onClose}>×</button>
         </div>
         <div className="mbody" style={{ paddingTop: 16 }}>
-          {!agent.live && <div className="hint">This agent works best on details you paste in; it will retrieve your stored data/policies automatically in Phase 3.</div>}
+          {agent.retrieves
+            ? <div className="hint">Answers are grounded in the Policy Library you can access, and cite their sources. If nothing relevant is stored, the agent will say so.</div>
+            : (!agent.live && <div className="hint">This agent works best on details you paste in; it will read your stored data automatically in a later phase.</div>)}
           <div className="field">
             <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask your question, or paste the text to work on…" style={{ minHeight: 100 }} />
             <div style={{ textAlign: "right", marginTop: 6 }}>
@@ -1018,8 +1031,136 @@ function RunAgentModal({ agent, showToast, onClose }) {
           {err && <div className="hint" style={{ color: "var(--oxblood)" }}>{err}</div>}
           {out && <div className="note usage"><div className="nlab">Claude — working draft, verify before relying</div>
             <div className="vtext" style={{ whiteSpace: "pre-wrap" }}>{out}</div></div>}
+          {sources.length > 0 && (
+            <div className="hint" style={{ marginTop: 8 }}>Sources: {sources.map((s) => `[${s.n}] ${s.title}`).join(" · ")}</div>
+          )}
         </div>
         <div className="mfoot"><button className="btn ghost" onClick={onClose}>Close</button></div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Policy Library ------------------------------ */
+// GC manages the policy corpus that "Ask Legal" retrieves from. v1 ingest = paste / .txt (PDF/DOCX
+// extraction is a fast-follow). Each policy is chunked on save; read access is scope-enforced by rules.
+function PolicyLibrary({ user, isReviewer, showToast }) {
+  const [rows, setRows] = useState(null);
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => { if (isReviewer) return listenCfgPolicies(setRows); }, [isReviewer]);
+
+  // Non-GC users don't manage the library; they consume it through Ask Legal.
+  if (!isReviewer) {
+    return <div className="lockmsg">Policies are maintained by the <b>General Counsel</b>. Ask questions about them through the <b>Ask Legal</b> agent above — it answers from the policies you&rsquo;re entitled to see and cites them.</div>;
+  }
+
+  const archive = async (p) => {
+    if (!confirm(`${p.status === "archived" ? "Restore" : "Archive"} “${p.title}”?`)) return;
+    try { await archiveCfgPolicy(p._id, p.status !== "archived", user); showToast(p.status === "archived" ? "Restored" : "Archived"); }
+    catch (e) { console.error(e); showToast(e.message || "Failed"); }
+  };
+
+  const list = rows || [];
+  return (
+    <>
+      <div className="toolbar">
+        <span className="chip">{list.filter((p) => p.status !== "archived").length} policies</span>
+        <button className="btn primary sm" onClick={() => setAdding(true)} style={{ marginLeft: "auto" }}>+ Add policy</button>
+      </div>
+      {rows === null ? <div className="lockmsg">Loading…</div>
+        : list.length === 0 ? <div className="empty"><div className="big">No policies yet.</div>Add your first — paste its text and choose whether it&rsquo;s group-wide or company-specific.</div> : (
+          <div className="tablewrap">
+            <table className="dtable">
+              <thead><tr><th>Policy</th><th>Category</th><th>Scope</th><th>Chunks</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {list.map((p) => (
+                  <tr key={p._id}>
+                    <td><b>{p.title}</b></td>
+                    <td>{p.category || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
+                    <td>{p.scope === "company" ? <span className="chip">{p.company || "company"}</span> : <span className="chip ok">group</span>}</td>
+                    <td className="mono">{p.chunkCount ?? "—"}</td>
+                    <td><span className={"chip" + (p.status === "archived" ? "" : " ok")}>{p.status || "active"}</span></td>
+                    <td><button className="btn sm ghost" onClick={() => archive(p)}>{p.status === "archived" ? "Restore" : "Archive"}</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      {adding && <PolicyModal user={user} existing={list} showToast={showToast} onClose={() => setAdding(false)} />}
+    </>
+  );
+}
+
+function PolicyModal({ user, existing, showToast, onClose }) {
+  const { entities } = useCompanyData();
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [scope, setScope] = useState("group");
+  const [company, setCompany] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!/\.(txt|md|csv)$/i.test(f.name)) { showToast("v1 reads .txt/.md — paste the text for PDF/DOCX."); return; }
+    setText(await f.text());
+    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
+  };
+
+  const valid = title.trim() && text.trim() && (scope === "group" || company);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await addCfgPolicy({ title, category, scope, company, effectiveDate }, text, user);
+      showToast("Policy added & indexed"); onClose();
+    } catch (e) { console.error(e); showToast(e.message || "Save failed — General Counsel only"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">Add policy</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{title || "New policy"}</div>
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          <div className="two">
+            <div className="field"><label>Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Expense Authorisation Policy" /></div>
+            <div className="field"><label>Category (optional)</label><input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Finance" /></div>
+          </div>
+          <div className="two">
+            <div className="field"><label>Applies to</label>
+              <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                <option value="group">Group-wide (all companies)</option>
+                <option value="company">A specific company</option>
+              </select></div>
+            <div className="field"><label>Company</label>
+              <select value={company} disabled={scope !== "company"} onChange={(e) => setCompany(e.target.value)}>
+                <option value="">Select…</option>
+                {entities.map((en) => <option key={en._id || en.code} value={en.code}>{en.name} ({en.code})</option>)}
+              </select></div>
+          </div>
+          <div className="field"><label>Effective date (optional)</label><input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} /></div>
+          <div className="field">
+            <label>Policy text</label>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the policy text here…" style={{ minHeight: 180 }} />
+            <div className="hint" style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <span>Paste the text, or load a .txt/.md file. PDF/DOCX import is coming next — paste for now.</span>
+              <input type="file" accept=".txt,.md,.csv,text/plain" onChange={onFile} />
+            </div>
+            <div className="hint">This is your extraction preview — confirm it reads correctly before saving. It will be chunked for retrieval on save.</div>
+          </div>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Indexing…" : "Add & index policy"}</button>
+        </div>
       </div>
     </div>
   );

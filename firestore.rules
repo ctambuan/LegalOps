@@ -120,7 +120,17 @@ service cloud.firestore {
     match /cfg_thresholds/{id} { allow read: if isAllowlisted(); allow write: if isGC(); }
     match /cfg_approvals/{id}  { allow read: if isAllowlisted(); allow write: if isGC(); }
     match /cfg_agents/{id}     { allow read: if isAllowlisted(); allow write: if isGC(); }
-    match /cfg_policies/{id}   { allow read: if isAllowlisted(); allow write: if isGC(); }
+    // Policies are READ-scoped: group policies are visible to all allowlisted users; a company-scoped
+    // policy (and its text chunks) is visible only to users in that company's scope (GC/all included).
+    // Writes are GC-only. scope/company are denormalised onto chunks so the rule needs no parent read.
+    match /cfg_policies/{id} {
+      allow read: if isAllowlisted() && (resource.data.scope == 'group' || hasCompany(resource.data.company));
+      allow write: if isGC();
+      match /chunks/{c} {
+        allow read: if isAllowlisted() && (resource.data.scope == 'group' || hasCompany(resource.data.company));
+        allow write: if isGC();
+      }
+    }
 
     // Maker-checker queue. Proposals carry `company` (the entity code). A maker in scope creates;
     // creating a brand-new company is a group act (GC or Regional). Approve/reject = an approver for

@@ -339,6 +339,18 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.3 — **Phase 3 / Policy Library + retrieval (RAG v1) BUILT**) — `cfg_policies` + `chunks`
+  subcollection (chunked on ingest; scope/company/title denormalised onto chunks). **Per-company
+  read-scoping now enforced in `firestore.rules`** (resolves the F1 gate): group policies readable by all
+  allowlisted, company policies only in-scope; GC writes only. `lib/policy.js`: `chunkText` + scope-aware
+  **client-side lexical retrieval** (`retrievePolicyContext`) — no embeddings/vector index/extra key (cost
+  decision per CLAUDE.md #4; semantic embeddings are a clean future upgrade). `/api/assist` agent mode
+  accepts retrieved `context` and is told to answer only from it and cite `[n]` sources. **Ask Legal**
+  (`retrieves:true`) now grounds answers in the policy corpus and shows its sources. UI: Policy Library
+  (GC add/archive; ingest by paste or .txt — **PDF/DOCX extraction is the documented fast-follow**).
+  **Deploy needs: (a) re-publish `firestore.rules` (policy scoping); (b) merge the app.** Build passes.
+  Open items updated: OI2 (embeddings) → deferred by design (lexical v1); OI3 (storage) → policy *text* in
+  Firestore, source-file storage (Drive) deferred with PDF/DOCX import.
 - 2026-06-06 (v3.2 — **Agent roster consolidated to 7**) — Owner-directed: **Document Processing Agent**
   (draft / review / standard-docs / approval-signing routing in one), Corporate Secretarial, Compliance &
   Licence Watch, Legal Risk Analyst, **Report Generator**, Legal Intake Triage, and **Ask Legal** (general

@@ -113,7 +113,11 @@ export async function POST(req) {
     const question = (body.question || "").trim();
     if (!question) return Response.json({ error: "Ask a question to run the agent." }, { status: 400 });
     system = AGENT_PREAMBLE + (instruction || "(no specific role configured — act as a careful general legal-operations assistant.)");
-    userText = question;
+    // Optional retrieved grounding from the Policy Library (client does scope-aware retrieval).
+    const context = typeof body.context === "string" ? body.context.trim() : "";
+    userText = context
+      ? `Use ONLY the following context from the Company's policies to answer, and cite the sources you rely on by their [n] label. If the answer is not in the context, say so plainly.\n\nContext:\n${context}\n\nQuestion: ${question}`
+      : question;
     if (typeof body.model === "string" && ALLOWED_MODELS.includes(body.model)) model = body.model;
     maxTokens = Math.min(8000, Math.max(256, Number(body.maxTokens) || 1024));
     useThinking = body.thinking === true && maxTokens >= 2048; // thinking needs headroom; keep it cheap otherwise
