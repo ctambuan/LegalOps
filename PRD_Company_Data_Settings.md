@@ -1,4 +1,9 @@
-# Product Requirements Document — Company Data Module (formerly "Settings")
+> ⚠️ **ARCHIVED / SUPERSEDED (2026-06-06).** The single controlling PRD for the whole dashboard is now
+> **`PRD_Legal_Operations_Workbench.md`** (v4.0), which consolidates this document and the Contracting/
+> Workbench PRD. This file is **retained, unmaintained, for full historical detail** (its verbatim Change
+> Log v1 → v3.10 is preserved here). Do not edit it as the live spec — update the consolidated PRD instead.
+
+# Product Requirements Document — Company Data Module (formerly "Settings") — ARCHIVED
 
 **Status:** BUILT & DEPLOYED — v3.10. Phases 1–3 + Risk Register shipped and merged to `main` (PRs #40–#45); Firestore rules (incl. policy read-scoping + risks) **published/republished** to project `legalops2026` (2026-06-06). The whole ecosystem is live. **Sections 1–17 below describe the as-built system** and are kept in lockstep with the code; the **Change Log (Section 18)** is the authoritative chronological record. Remaining work (all optional, flagged for cost): populate data, Risk Register module, semantic embeddings, OCR — see Section 17.
 **Product positioning:** A top-level module of the **Legal Operations Workbench** — a centralised, governed **Company Data** layer (the source of truth) every other tool reads from, plus the workbench's access-control surface and its AI agents. Sibling to the live **Contracting Engine** and **Document Number Generator** (see `PRD_Clause_Workbench.md`).

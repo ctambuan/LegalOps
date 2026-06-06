@@ -1,4 +1,9 @@
-# Product Requirements Document — Clause Library Workbench (Contracting Engine)
+> ⚠️ **ARCHIVED / SUPERSEDED (2026-06-06).** The single controlling PRD for the whole dashboard is now
+> **`PRD_Legal_Operations_Workbench.md`** (v4.0), which consolidates this document and the Company Data PRD
+> and reconciles them. This file is **retained, unmaintained, for full historical detail** (its verbatim
+> Change Log is preserved here). Do not edit it as the live spec — update the consolidated PRD instead.
+
+# Product Requirements Document — Clause Library Workbench (Contracting Engine) — ARCHIVED
 
 **Status:** LIVE (deployed to production; in team rollout). App v0.9; Playbook v3.2 (first post-launch calibration). **Two modules now live — the Contracting Engine and the Document Number Generator (Section 12).** Live features include Claude AI assist (OI6), in-app Save to Drive (OI1), a live Google-Sheet source-of-truth mirror for document numbers, and reviewer-only in-app Drive archiving of superseded documents (broad `drive` scope, enabled in production 2026-06-03). All open items OI1–OI6 resolved or process-defined.
 **Live URL:** https://legal-ops-two.vercel.app/
