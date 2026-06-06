@@ -9,19 +9,67 @@ service cloud.firestore {
     function isAllowlisted() {
       return isSignedIn() && exists(/databases/$(database)/documents/allowlist/$(email()));
     }
-    function isReviewer() {
-      // Reviewer = custom claim OR allowlist role == 'reviewer'
+    function alData() { return get(/databases/$(database)/documents/allowlist/$(email())).data; }
+    function myRole() { return isAllowlisted() ? alData().role : ''; }
+    function myCompanies() { return isAllowlisted() ? alData().companies : []; }
+
+    // General Counsel = super-admin (group). The custom claim and the legacy 'reviewer'/'contributor'
+    // roles (the original owner's account) normalise to GC.
+    function isGC() {
       return isSignedIn() && (
         request.auth.token.reviewer == true ||
-        (isAllowlisted() &&
-         get(/databases/$(database)/documents/allowlist/$(email())).data.role == 'reviewer')
+        (isAllowlisted() && (alData().role == 'gc' || alData().role == 'reviewer' || alData().role == 'contributor'))
       );
     }
+    // Company scope: companies == 'all' (group) or a list of entity codes. GC covers everything.
+    function hasCompany(c) {
+      return isGC() || myCompanies() == 'all' || (myCompanies() is list && c in myCompanies());
+    }
+    // Checker for company c: GC, or that company's Head of Legal.
+    function isApproverFor(c) {
+      return isGC() || (myRole() == 'hol' && hasCompany(c));
+    }
+    // Maker for company c: GC, group-wide Regional Counsel, or in-scope Head of Legal / Country Counsel.
+    function isMakerFor(c) {
+      return isGC() || myRole() == 'regional' ||
+        ((myRole() == 'hol' || myRole() == 'country') && hasCompany(c));
+    }
+    // Legacy alias: the older modules (Contracting review, DocGen settings) are GC-gated.
+    function isReviewer() { return isGC(); }
 
-    // --- allowlist: managed by admin/console only; readable by the owning user to resolve own role ---
+    // --- allowlist: the workbench access list + per-user role (Team & Access / User Management) ---
+    // Reviewer (Head of Legal) manages it from the app; no Admin SDK (org policy blocks SA keys), so
+    // access control is enforced here. The owning user may read their own doc (to resolve role) and
+    // stamp their own sign-in metadata (never their role/email). Approved email domains are pinned
+    // here as the security boundary — adding a domain means editing this rule (and NEXT_PUBLIC_ALLOWED_USER_DOMAINS).
+    function approvedDomain(e) {
+      return e.matches('^[^@]+@(pluang[.]com|batubara-id[.]com)$');
+    }
     match /allowlist/{e} {
-      allow read: if isSignedIn() && e == email();
-      allow write: if false; // console / admin SDK only
+      // Owner reads own doc (resolve role at sign-in); the GC reads all to manage the team.
+      allow read: if (isSignedIn() && e == email()) || isGC();
+
+      // Add a user: GC only; doc id == lowercased email on an approved domain; a valid group role.
+      allow create: if isGC()
+        && request.resource.data.email == e
+        && approvedDomain(e)
+        && request.resource.data.role in ['gc', 'regional', 'hol', 'country'];
+
+      // GC edits (role / company-scope changes): email immutable; the GC may NOT change their OWN
+      // role (no self-demote / lockout).
+      allow update: if isGC()
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role in ['gc', 'regional', 'hol', 'country']
+        && (e != email() || request.resource.data.role == resource.data.role);
+
+      // Self sign-in stamp: the owning user may update only sign-in metadata — never role, scope or email.
+      allow update: if isSignedIn() && e == email()
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.companies == resource.data.companies
+        && request.resource.data.email == resource.data.email;
+
+      // Off-board: GC only, and never your own account (no self-lockout).
+      allow delete: if isGC() && e != email();
     }
 
     // --- clauses (seed reference): read-only to allowlisted users; never client-writable ---
@@ -52,6 +100,43 @@ service cloud.firestore {
     match /adopted/{id} {
       allow read: if isAllowlisted();
       allow write: if isReviewer();
+    }
+
+    // --- Company Data (cfg_*) — editable master data the tools read from; reviewer writes only ---
+    // Entities (the doc id IS the company/entity code). Read = any allowlisted (shared group register).
+    // Create a new company = GC (group structure). Edit/archive an existing one = that company's
+    // approver (GC or its Head of Legal). Makers don't write live — they go through cfg_proposals.
+    match /cfg_entities/{id} {
+      allow read: if isAllowlisted();
+      allow create: if isGC();
+      allow update, delete: if isApproverFor(id);
+      // Directors / Lines of Business / Signers (and any future subcollection) — scoped to the entity.
+      match /{document=**} {
+        allow read: if isAllowlisted();
+        allow write: if isApproverFor(id);
+      }
+    }
+    // Group-level config (approval matrix, agents, policies) — GC only for now; scoping added later.
+    match /cfg_thresholds/{id} { allow read: if isAllowlisted(); allow write: if isGC(); }
+    match /cfg_approvals/{id}  { allow read: if isAllowlisted(); allow write: if isGC(); }
+    match /cfg_agents/{id}     { allow read: if isAllowlisted(); allow write: if isGC(); }
+    match /cfg_policies/{id}   { allow read: if isAllowlisted(); allow write: if isGC(); }
+
+    // Maker-checker queue. Proposals carry `company` (the entity code). A maker in scope creates;
+    // creating a brand-new company is a group act (GC or Regional). Approve/reject = an approver for
+    // that company, and never the proposer (separation of duties), except the GC backstop.
+    match /cfg_proposals/{id} {
+      allow read: if isAllowlisted();
+      allow create: if isAllowlisted()
+        && request.resource.data.proposerEmail == email()
+        && request.resource.data.status == 'pending'
+        && (request.resource.data.action == 'create'
+              ? (isGC() || myRole() == 'regional')
+              : (isMakerFor(request.resource.data.company)
+                 && request.resource.data.company == request.resource.data.targetId));
+      allow update: if isApproverFor(resource.data.company)
+        && (resource.data.proposerEmail != email() || isGC());
+      allow delete: if false;
     }
 
     // --- audit: append-only, immutable ---

@@ -9,12 +9,13 @@ import {
   listenDocgenMeta, setDocgenMeta, deleteDocNumber,
 } from "../lib/data";
 import {
-  ENTITIES, DEPARTMENTS, CABINETS, DOC_TYPES, DOC_CATEGORIES, SIGNING_METHODS,
-  CURRENCIES, FREQUENCIES, isoFor, annualFactor, toUsd, usdValueBucket,
+  DEPARTMENTS, CABINETS, DOC_TYPES, DOC_CATEGORIES, SIGNING_METHODS,
+  CURRENCIES, FREQUENCIES, isoFor, annualFactor, toUsd, valueBucketKey, bucketLabel,
   seriesForType, buildDocumentNumber, businessApprovers, folderCode,
 } from "../lib/docgen";
 import { DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
 import { mirrorRegisterToDrive, downloadRegisterCsv, registerSignature } from "../lib/docgenDrive";
+import { useCompanyData } from "../lib/companyData";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtInt = (n) => (n || n === 0 ? Number(n).toLocaleString("en-US") : "");
@@ -70,9 +71,12 @@ export default function DocGen({ tab, user, isReviewer, showToast }) {
 /* --------------------------------- Form --------------------------------- */
 function Form({ records, settings, user, showToast }) {
   const { getDriveAccessToken } = useAuth();
+  // Entities, the approval matrix and thresholds all come live from Company Data (seed fallback),
+  // so a newly-added entity or an edited approver/threshold takes effect here immediately.
+  const { entities: companyEntities, approvals, thresholds } = useCompanyData();
   const blank = {
     date: today(), pic: settings.defaultPic || "", jira: "", department: "", docType: "",
-    category: "", title: "", entity: "", counterparty: "", signingMethod: "Electronic",
+    category: "", title: "", entity: "", entityCode: "", counterparty: "", signingMethod: "Electronic",
     valueCurrency: "USD", valueAmount: "", valueFrequency: "Annually", budgetStatus: "",
   };
   const [f, setF] = useState(blank);
@@ -107,16 +111,18 @@ function Form({ records, settings, user, showToast }) {
   const usdRaw = rates ? toUsd(f.valueAmount, iso, rates) : null;          // USD of the entered period amount
   const usdForApprover = usdRaw == null ? null : usdRaw * annualFactor(f.valueFrequency); // ×12 if monthly
   // Approver route depends on budget status: Unbudgeted → highest approver; Budgeted → value tier.
+  const bucketKey = !isAgreement ? "" : isUnbudgeted ? "high"
+    : (usdForApprover != null ? valueBucketKey(usdForApprover, thresholds) : "");
   const valueBucket = !isAgreement ? ""
     : isUnbudgeted ? "Unbudgeted or outside approved budget"
-    : (usdForApprover != null ? usdValueBucket(usdForApprover) : "");
+    : bucketLabel(bucketKey, thresholds);
 
   const preview = useMemo(() => {
     if (!f.docType || !f.entity) return "";
     if (!isPolicy && (!f.department || !f.jira)) return "";
     return buildDocumentNumber(f, 0).replace(/^\d{3}/, "###");
   }, [f, isPolicy]);
-  const approverPreview = businessApprovers({ department: f.department, category: f.category, value: valueBucket, docType: f.docType }, settings.approvers || {});
+  const approverPreview = businessApprovers({ department: f.department, category: f.category, docType: f.docType, unbudgeted: isUnbudgeted, usd: usdForApprover }, approvals, thresholds);
 
   // Agreements require an explicit Budgeted/Unbudgeted choice; a Budgeted one also needs a value.
   const agreementValueOk = !isAgreement || (
@@ -132,7 +138,7 @@ function Form({ records, settings, user, showToast }) {
     try {
       const rec = {
         date: f.date, pic: f.pic, docType: f.docType, title: f.title.trim(),
-        entity: f.entity, signingMethod: f.signingMethod,
+        entity: f.entity, entityCode: f.entityCode || "", signingMethod: f.signingMethod,
         jira: isPolicy ? "" : f.jira.trim(),
         department: isPolicy ? "" : f.department,
         counterparty: isPolicy ? "" : f.counterparty.trim(),
@@ -147,12 +153,11 @@ function Form({ records, settings, user, showToast }) {
         fxRate: isAgreement && rates ? (rates[iso] ?? null) : null,
         fxDate: isAgreement ? (fxDate || null) : null,
         valueBucket,
-        value: valueBucket, // consumed by businessApprovers in createDocNumber
       };
-      const created = await createDocNumber(rec, user, settings);
+      const created = await createDocNumber(rec, user, { ...settings, approvals, thresholds });
       setResult(created);
       showToast(`Generated ${created.number}`);
-      setF((p) => ({ ...blank, date: p.date, pic: p.pic, department: p.department, docType: p.docType, entity: p.entity }));
+      setF((p) => ({ ...blank, date: p.date, pic: p.pic, department: p.department, docType: p.docType, entity: p.entity, entityCode: p.entityCode }));
     } catch (e) { console.error(e); showToast(e.message || "Generation failed"); }
     setBusy(false);
   };
@@ -175,7 +180,8 @@ function Form({ records, settings, user, showToast }) {
         <div className="field"><label>Document Type</label>
           <select value={f.docType} onChange={set("docType")}><option value="">Select…</option>{DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
         <div className="field"><label>Pluang Entity</label>
-          <select value={f.entity} onChange={set("entity")}><option value="">Select…</option>{ENTITIES.map((e) => <option key={e.code} value={e.name}>{e.name} ({e.code})</option>)}</select></div>
+          <select value={f.entity} onChange={(e) => { const ent = companyEntities.find((x) => x.name === e.target.value); setF((p) => ({ ...p, entity: e.target.value, entityCode: ent?.code || "" })); }}>
+            <option value="">Select…</option>{companyEntities.map((e) => <option key={e._id || e.code} value={e.name}>{e.name} ({e.code})</option>)}</select></div>
       </div>
 
       {!isPolicy && (
@@ -467,28 +473,17 @@ function FilingModal({ record, user, showToast, onClose }) {
 }
 
 /* ------------------------------- Settings ------------------------------- */
-const APPR_FIELDS = [
-  { k: "admin", l: "Administrative" }, { k: "agree25", l: "Agreement ≤ 25k" },
-  { k: "agree100", l: "Agreement 25–100k" }, { k: "agreeOver", l: "≥ 100k / Unbudgeted" },
-];
-
+// The approval matrix + thresholds moved to Company Data → Approval Policy (the group source of
+// truth the generator now reads live). This tab keeps only the generator's own defaults.
 function Settings({ settings, isReviewer, user, showToast }) {
-  const [draft, setDraft] = useState({ defaultPic: "", approvers: {}, startSeq: {} });
+  const [draft, setDraft] = useState({ defaultPic: "", startSeq: {} });
   const [busy, setBusy] = useState(false);
   const loadedRef = useRef(false);
   useEffect(() => {
     if (loadedRef.current) return;
     loadedRef.current = true;
-    setDraft({ defaultPic: settings.defaultPic || "", approvers: settings.approvers || {}, startSeq: settings.startSeq || {} });
+    setDraft({ defaultPic: settings.defaultPic || "", startSeq: settings.startSeq || {} });
   }, [settings]);
-
-  const setAppr = (dept, field, v) => setDraft((d) => {
-    const a = { ...(d.approvers || {}) };
-    const row = { ...(a[dept] || {}) };
-    if (v.trim()) row[field] = v; else delete row[field];
-    if (Object.keys(row).length) a[dept] = row; else delete a[dept];
-    return { ...d, approvers: a };
-  });
 
   const save = async () => {
     setBusy(true);
@@ -502,9 +497,9 @@ function Settings({ settings, isReviewer, user, showToast }) {
 
   return (
     <div style={{ maxWidth: 980 }}>
-      <div className="lockmsg">Approver names and defaults below are used to build every new record. {ro
-        ? "These are read-only for your role — ask the Head of Legal to change them."
-        : "Edit any approver to override the workbook default for that cell. Leave blank to keep the default (shown as placeholder)."}</div>
+      <div className="lockmsg">Generator defaults below are used to build every new record. The <b>approval matrix and
+        thresholds</b> now live in <b>Company Data → Approval Policy</b> (the group source of truth the generator reads
+        live). {ro ? "These defaults are read-only for your role." : ""}</div>
 
       <div className="two" style={{ maxWidth: 560 }}>
         <div className="field"><label>Default PIC initials</label>
@@ -519,27 +514,6 @@ function Settings({ settings, isReviewer, user, showToast }) {
             <input type="number" disabled={ro} value={draft.startSeq?.[`${cy}__${s}`] ?? ""} placeholder="1"
               onChange={(e) => setDraft((d) => ({ ...d, startSeq: { ...(d.startSeq || {}), [`${cy}__${s}`]: e.target.value } }))} /></div>
         ))}
-      </div>
-
-      <div className="sectlabel"><span className="t">Approval matrix</span><span className="h">— Business Approvers by department & document value</span></div>
-      <div className="tablewrap">
-        <table className="dtable appr">
-          <thead><tr><th>Department</th>{APPR_FIELDS.map((c) => <th key={c.k}>{c.l}</th>)}</tr></thead>
-          <tbody>
-            {DEPARTMENTS.map((d) => (
-              <tr key={d.code}>
-                <td className="deptname">{d.name} <span className="chip" style={{ marginLeft: 4 }}>{d.code}</span></td>
-                {APPR_FIELDS.map((c) => (
-                  <td key={c.k}>
-                    <input className="apprinput" disabled={ro}
-                      value={draft.approvers?.[d.name]?.[c.k] ?? ""} placeholder={d[c.k]}
-                      onChange={(e) => setAppr(d.name, c.k, e.target.value)} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
 
       {!ro && (
