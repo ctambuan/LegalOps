@@ -15,6 +15,7 @@ import {
   listenCfgPolicies, addCfgPolicy, updateCfgPolicyMeta, archiveCfgPolicy,
 } from "../lib/data";
 import { retrievePolicyContext } from "../lib/policy";
+import { extractFileText } from "../lib/extractText";
 import { ENTITIES, DEPARTMENTS, DEFAULT_THRESHOLDS, bucketLabel, approverCell } from "../lib/docgen";
 import {
   ROLES, roleLabel, normalizeRole,
@@ -1101,21 +1102,30 @@ function PolicyModal({ user, existing, showToast, onClose }) {
   const [company, setCompany] = useState("");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [text, setText] = useState("");
+  const [sourceName, setSourceName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [extracting, setExtracting] = useState(false);
 
   const onFile = async (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!/\.(txt|md|csv)$/i.test(f.name)) { showToast("v1 reads .txt/.md — paste the text for PDF/DOCX."); return; }
-    setText(await f.text());
-    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
+    setExtracting(true);
+    try {
+      const t = await extractFileText(f);
+      setText(t);
+      setSourceName(f.name);
+      if (!title) setTitle(f.name.replace(/\.[^.]+$/, ""));
+      if (!t.trim()) showToast("No text found — the file may be scanned/image-only. Paste the text instead.");
+    } catch (err) { console.error(err); showToast(err.message || "Could not read that file — paste the text instead."); }
+    setExtracting(false);
+    e.target.value = ""; // allow re-selecting the same file
   };
 
   const valid = title.trim() && text.trim() && (scope === "group" || company);
   const save = async () => {
     setBusy(true);
     try {
-      await addCfgPolicy({ title, category, scope, company, effectiveDate }, text, user);
+      await addCfgPolicy({ title, category, scope, company, effectiveDate, sourceName }, text, user);
       showToast("Policy added & indexed"); onClose();
     } catch (e) { console.error(e); showToast(e.message || "Save failed — General Counsel only"); }
     setBusy(false);
@@ -1148,13 +1158,13 @@ function PolicyModal({ user, existing, showToast, onClose }) {
           </div>
           <div className="field"><label>Effective date (optional)</label><input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} /></div>
           <div className="field">
-            <label>Policy text</label>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the policy text here…" style={{ minHeight: 180 }} />
-            <div className="hint" style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <span>Paste the text, or load a .txt/.md file. PDF/DOCX import is coming next — paste for now.</span>
-              <input type="file" accept=".txt,.md,.csv,text/plain" onChange={onFile} />
+            <label>Policy text {extracting && <span className="hint" style={{ display: "inline" }}>· extracting…</span>}</label>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Upload a PDF / DOCX / TXT, or paste the policy text here…" style={{ minHeight: 180 }} />
+            <div className="hint" style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <span>Upload a <b>PDF, DOCX</b> or .txt to extract its text, or paste it directly.{sourceName ? ` Source: ${sourceName}` : ""}</span>
+              <input type="file" accept=".pdf,.docx,.txt,.md,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" disabled={extracting} onChange={onFile} />
             </div>
-            <div className="hint">This is your extraction preview — confirm it reads correctly before saving. It will be chunked for retrieval on save.</div>
+            <div className="hint">This is your extraction preview — confirm it reads correctly (and fix any garbled text) before saving. It will be chunked for retrieval on save.</div>
           </div>
         </div>
         <div className="mfoot">

@@ -339,6 +339,14 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.4 — **PDF / DOCX policy ingestion**) — Policy Library now extracts text from uploaded
+  **PDF and DOCX** (plus .txt). Extraction runs **server-side** at `/api/policy/extract` (Node, ID-token
+  gated) using `unpdf` (PDF) + `mammoth` (DOCX) — chosen over client parsing for reliability and to keep
+  the parsers out of the client bundle; pure parsing, no AI cost. The extracted text populates the
+  extraction-preview box for GC confirmation, then chunks/indexes as before; paste remains the fallback
+  (and the answer for scanned/image-only PDFs). Ships via app merge only (no rules change). Build passes
+  (a benign webpack `import.meta` warning from unpdf's serverless build; runs fine under the route's Node
+  runtime — verify with one real PDF post-deploy). Resolves the v3.3 PDF/DOCX fast-follow.
 - 2026-06-06 (v3.3 — **Phase 3 / Policy Library + retrieval (RAG v1) BUILT**) — `cfg_policies` + `chunks`
   subcollection (chunked on ingest; scope/company/title denormalised onto chunks). **Per-company
   read-scoping now enforced in `firestore.rules`** (resolves the F1 gate): group policies readable by all
