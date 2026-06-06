@@ -131,7 +131,8 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && (request.resource.data.action == 'create'
               ? (isGC() || myRole() == 'regional')
-              : isMakerFor(request.resource.data.company));
+              : (isMakerFor(request.resource.data.company)
+                 && request.resource.data.company == request.resource.data.targetId));
       allow update: if isApproverFor(resource.data.company)
         && (resource.data.proposerEmail != email() || isGC());
       allow delete: if false;
