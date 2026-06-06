@@ -339,6 +339,16 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-05 (v2.4 — **Phase 1 / Records (Entities) BUILT**) — Shipped the Entities area and the
+  consumption layer: `cfg_entities` + Directors/Lines-of-Business/Authorized-Signers subcollections
+  (`lib/data.js`), `useCompanyData()` with seed fallback (`lib/companyData.js`), `firestore.rules` for all
+  `cfg_*` collections + the maker-checker `cfg_proposals` queue (forward-compat), the Entities master-detail
+  UI with reviewer Add/Edit/Archive and a one-click "load defaults" seed (`app/CompanyData.js`), and a kv
+  style (`app/globals.css`). **First single-source-of-truth wire-up:** the Document Number Generator's entity
+  picker now reads live entities and carries the entity code (`app/DocGen.js`, `lib/docgen.js`), so a
+  newly-added entity flows straight into document numbers. Build passes. Editing is reviewer-direct in this
+  increment; the maker-checker *propose* flow for contributors and the Approval-Policy editor (with DocGen
+  approver/threshold rewire) are the remaining Phase 1 pieces.
 - 2026-06-05 (v2.3 — **Phase 1 / User Management BUILT**) — Implemented Team & Access end-to-end:
   `lib/config.js` (domains, app URL, invite flag), `lib/firebase.js` (`gmail.send` scope), `firestore.rules`
   (allowlist governance), `lib/data.js` (`listenAllowlist` / `addAllowlistUser` / `updateAllowlistRole` /

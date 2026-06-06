@@ -5,12 +5,18 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../lib/auth";
-import { listenAllowlist, addAllowlistUser, updateAllowlistRole, removeAllowlistUser } from "../lib/data";
+import {
+  listenAllowlist, addAllowlistUser, updateAllowlistRole, removeAllowlistUser,
+  listenCfgEntities, seedCfgEntities, addCfgEntity, saveCfgEntity, archiveCfgEntity,
+  listenEntitySub, addEntitySub, saveEntitySub, deleteEntitySub,
+} from "../lib/data";
+import { ENTITIES } from "../lib/docgen";
 import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL } from "../lib/config";
 import { buildInvite, sendInviteViaGmail } from "../lib/invite";
 
 export default function CompanyData({ tab, user, isReviewer, showToast }) {
   if (tab === "team") return <TeamAccess user={user} isReviewer={isReviewer} showToast={showToast} />;
+  if (tab === "entities") return <Entities user={user} isReviewer={isReviewer} showToast={showToast} />;
   return <Planned tab={tab} />;
 }
 
@@ -198,6 +204,273 @@ function AddUserModal({ user, resend, existing, showToast, onClose }) {
           <button className="btn primary" disabled={busy || (!resend && !valid)} onClick={submit}>
             {busy ? "Working…" : resend ? "Resend invite" : (USER_INVITE_EMAIL_ENABLED ? "Add & send invite" : "Add user")}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------- Entities --------------------------------- */
+// Column configs for the three per-entity subtables (drives the generic SubTable + editor).
+const DIRECTOR_COLS = [
+  { k: "name", l: "Name", req: true }, { k: "title", l: "Title" },
+  { k: "appointmentDate", l: "Appointed", type: "date" }, { k: "validity", l: "Validity" },
+  { k: "privyId", l: "PrivyID" },
+];
+const LOB_COLS = [
+  { k: "code", l: "Code (KBLI/SSIC)", req: true }, { k: "description", l: "Description" },
+  { k: "licenseName", l: "License" }, { k: "issuingAuthority", l: "Issuing authority" },
+  { k: "validityPeriod", l: "Validity" },
+];
+const SIGNER_COLS = [
+  { k: "signerName", l: "Signer", req: true }, { k: "title", l: "Title" },
+  { k: "maxThresholdUsd", l: "Limit (USD)", type: "number" },
+  { k: "validFrom", l: "Valid from", type: "date" }, { k: "validTo", l: "Valid to", type: "date" },
+];
+const PROFILE_FIELDS = [
+  { k: "name", l: "Legal name", req: true }, { k: "jurisdiction", l: "Jurisdiction" },
+  { k: "address", l: "Registered address", wide: true },
+  { k: "registrationType", l: "Registration type" }, { k: "registrationNo", l: "Registration no." },
+  { k: "baseCurrency", l: "Base currency" },
+];
+
+function Entities({ user, isReviewer, showToast }) {
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [sel, setSel] = useState(null);
+  const [seeding, setSeeding] = useState(false);
+
+  useEffect(() => listenCfgEntities(setRows), []);
+
+  const seed = async () => {
+    setSeeding(true);
+    try { await seedCfgEntities(ENTITIES, user); showToast(`Loaded ${ENTITIES.length} default entities`); }
+    catch (e) { console.error(e); showToast(e.message || "Could not load defaults"); }
+    setSeeding(false);
+  };
+
+  const list = useMemo(() => {
+    const all = rows || [];
+    const t = q.trim().toLowerCase();
+    return all.filter((e) => (showArchived || e.status !== "archived")
+      && (!t || [e.name, e.code, e.jurisdiction, e.registrationNo].some((v) => String(v || "").toLowerCase().includes(t))));
+  }, [rows, q, showArchived]);
+
+  if (sel) {
+    const entity = (rows || []).find((e) => e._id === sel);
+    if (!entity) { setSel(null); return null; }
+    return <EntityDetail entity={entity} user={user} isReviewer={isReviewer} showToast={showToast} onBack={() => setSel(null)} />;
+  }
+
+  if (rows === null) return <div className="lockmsg">Loading entities…</div>;
+
+  return (
+    <>
+      {rows.length === 0 && (
+        <div className="lockmsg" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <span>No entities yet. {isReviewer ? "Load the bundled defaults to start, then edit them — or add your own." : "Ask the Head of Legal to set up the entity list."}</span>
+          {isReviewer && <button className="btn primary sm" disabled={seeding} onClick={seed}>{seeding ? "Loading…" : `Load ${ENTITIES.length} default entities`}</button>}
+        </div>
+      )}
+      <div className="toolbar">
+        <div className="search">
+          <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
+          <input placeholder="Search entities — name, code, jurisdiction…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <span className="chip">{list.length} entities</span>
+        <label className="chip" style={{ cursor: "pointer" }}><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} style={{ marginRight: 6 }} />Show archived</label>
+        {isReviewer && <button className="btn primary sm" onClick={() => setSel("__new__")} style={{ marginLeft: "auto" }}>+ Add entity</button>}
+      </div>
+
+      {sel === "__new__" && <EntityProfileModal user={user} showToast={showToast} existing={rows} onClose={() => setSel(null)} onCreated={(id) => setSel(id)} />}
+
+      {list.length === 0 && rows.length > 0 ? <div className="empty"><div className="big">No matches.</div>Adjust your search.</div> : (
+        <div className="tablewrap">
+          <table className="dtable">
+            <thead><tr><th>Entity</th><th>Code</th><th>Jurisdiction</th><th>Registration</th><th>Status</th></tr></thead>
+            <tbody>
+              {list.map((e) => (
+                <tr key={e._id} onClick={() => setSel(e._id)} style={{ cursor: "pointer" }}>
+                  <td><b>{e.name}</b></td>
+                  <td className="mono">{e.code}</td>
+                  <td>{e.jurisdiction || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
+                  <td>{e.registrationNo ? `${e.registrationType || ""} ${e.registrationNo}`.trim() : <span style={{ color: "var(--ink3)" }}>—</span>}</td>
+                  <td><span className={"chip" + (e.status === "archived" ? "" : " ok")}>{e.status || "active"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+function EntityDetail({ entity, user, isReviewer, showToast, onBack }) {
+  const [t, setT] = useState("profile");
+  const [editProfile, setEditProfile] = useState(false);
+  const archived = entity.status === "archived";
+  const TABS = [["profile", "Profile"], ["directors", "Directors"], ["lob", "Lines of Business"], ["signers", "Authorized Signers"]];
+
+  const toggleArchive = async () => {
+    if (!confirm(archived ? `Restore ${entity.name}?` : `Archive ${entity.name}? It will be hidden from pickers but kept for historical references.`)) return;
+    try { await archiveCfgEntity(entity._id, !archived, user); showToast(archived ? "Restored" : "Archived"); }
+    catch (e) { showToast(e.message || "Failed"); }
+  };
+
+  return (
+    <>
+      <div className="toolbar">
+        <button className="btn sm ghost" onClick={onBack}>← All entities</button>
+        <span style={{ fontWeight: 700, fontSize: 16 }}>{entity.name}</span>
+        <span className="chip mono">{entity.code}</span>
+        {archived && <span className="chip">archived</span>}
+        {isReviewer && <button className="btn sm ghost" onClick={toggleArchive} style={{ marginLeft: "auto" }}>{archived ? "Restore" : "Archive"}</button>}
+      </div>
+
+      <div className="tabs2" style={{ marginBottom: 14 }}>
+        {TABS.map(([k, l]) => <button key={k} className={"tab2 " + (t === k ? "active" : "")} onClick={() => setT(k)}>{l}</button>)}
+      </div>
+
+      {t === "profile" && (
+        <div style={{ maxWidth: 640 }}>
+          <dl className="kv">
+            {PROFILE_FIELDS.map((f) => (
+              <div key={f.k} className="kvrow"><dt>{f.l}</dt><dd>{entity[f.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</dd></div>
+            ))}
+          </dl>
+          {isReviewer && <button className="btn primary sm" onClick={() => setEditProfile(true)}>Edit profile</button>}
+          {editProfile && <EntityProfileModal user={user} showToast={showToast} editing={entity} onClose={() => setEditProfile(false)} />}
+        </div>
+      )}
+      {t === "directors" && <SubTable entityId={entity._id} sub="directors" columns={DIRECTOR_COLS} label="director" isReviewer={isReviewer} user={user} showToast={showToast} />}
+      {t === "lob" && <SubTable entityId={entity._id} sub="lob" columns={LOB_COLS} label="line of business" isReviewer={isReviewer} user={user} showToast={showToast} />}
+      {t === "signers" && <SubTable entityId={entity._id} sub="signers" columns={SIGNER_COLS} label="signer" isReviewer={isReviewer} user={user} showToast={showToast} />}
+    </>
+  );
+}
+
+// Create or edit an entity profile (code is the doc id — editable only on create).
+function EntityProfileModal({ user, showToast, editing, existing = [], onClose, onCreated }) {
+  const [code, setCode] = useState(editing?.code || "");
+  const [f, setF] = useState(() => {
+    const init = {}; PROFILE_FIELDS.forEach((x) => (init[x.k] = editing?.[x.k] || "")); return init;
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const dup = !editing && existing.some((e) => e._id === code.trim());
+  const valid = (editing || (code.trim() && !dup)) && f.name.trim();
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (editing) { await saveCfgEntity(editing._id, f, user); showToast("Entity updated"); onClose(); }
+      else { const id = await addCfgEntity({ ...f, code: code.trim() }, user); showToast("Entity added"); onClose(); onCreated?.(id); }
+    } catch (e) { console.error(e); showToast(e.message || "Save failed"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">{editing ? "Edit entity" : "Add entity"}</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{editing ? editing.name : "New entity"}</div>
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          <div className="field"><label>Entity code{editing ? " (fixed)" : ""}</label>
+            <input value={code} disabled={!!editing} onChange={(e) => setCode(e.target.value)} placeholder="e.g. BSC" />
+            {dup && <div className="hint" style={{ color: "var(--oxblood)" }}>That code already exists.</div>}
+          </div>
+          {PROFILE_FIELDS.map((x) => (
+            <div className="field" key={x.k}><label>{x.l}{x.req ? "" : " (optional)"}</label>
+              <input value={f[x.k]} onChange={set(x.k)} /></div>
+          ))}
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Saving…" : editing ? "Save" : "Add entity"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Generic add/edit/delete table for a per-entity subcollection.
+function SubTable({ entityId, sub, columns, label, isReviewer, user, showToast }) {
+  const [rows, setRows] = useState([]);
+  const [edit, setEdit] = useState(null); // row object, or {} for new
+  useEffect(() => listenEntitySub(entityId, sub, setRows), [entityId, sub]);
+
+  const remove = async (r) => {
+    if (!confirm(`Delete this ${label}? This cannot be undone.`)) return;
+    try { await deleteEntitySub(entityId, sub, r._id, user); showToast("Deleted"); }
+    catch (e) { showToast(e.message || "Delete failed"); }
+  };
+
+  return (
+    <>
+      <div className="toolbar">
+        <span className="chip">{rows.length} {rows.length === 1 ? label : `${label}s`}</span>
+        {isReviewer && <button className="btn primary sm" onClick={() => setEdit({})} style={{ marginLeft: "auto" }}>+ Add {label}</button>}
+      </div>
+      {rows.length === 0 ? <div className="empty"><div className="big">None yet.</div>{isReviewer ? `Click “Add ${label}”.` : "Nothing recorded."}</div> : (
+        <div className="tablewrap">
+          <table className="dtable">
+            <thead><tr>{columns.map((c) => <th key={c.k}>{c.l}</th>)}{isReviewer && <th></th>}</tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r._id}>
+                  {columns.map((c) => <td key={c.k} className={c.type === "number" ? "mono" : ""}>{r[c.k] || <span style={{ color: "var(--ink3)" }}>—</span>}</td>)}
+                  {isReviewer && <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="btn sm ghost" onClick={() => setEdit(r)}>Edit</button>
+                    <button className="btn sm ghost" onClick={() => remove(r)} style={{ marginLeft: 6 }}>Delete</button>
+                  </td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {edit && <SubEditModal entityId={entityId} sub={sub} columns={columns} label={label} row={edit._id ? edit : null} user={user} showToast={showToast} onClose={() => setEdit(null)} />}
+    </>
+  );
+}
+
+function SubEditModal({ entityId, sub, columns, label, row, user, showToast, onClose }) {
+  const [f, setF] = useState(() => { const init = {}; columns.forEach((c) => (init[c.k] = row?.[c.k] ?? "")); return init; });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const valid = columns.filter((c) => c.req).every((c) => String(f[c.k] || "").trim());
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (row) { await saveEntitySub(entityId, sub, row._id, f, user); showToast("Saved"); }
+      else { await addEntitySub(entityId, sub, f, user); showToast(`Added ${label}`); }
+      onClose();
+    } catch (e) { console.error(e); showToast(e.message || "Save failed"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">{row ? `Edit ${label}` : `Add ${label}`}</div>
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          {columns.map((c) => (
+            <div className="field" key={c.k}><label>{c.l}{c.req ? "" : " (optional)"}</label>
+              <input type={c.type === "date" ? "date" : c.type === "number" ? "number" : "text"} value={f[c.k]} onChange={set(c.k)} /></div>
+          ))}
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Saving…" : "Save"}</button>
         </div>
       </div>
     </div>

@@ -81,6 +81,31 @@ service cloud.firestore {
       allow write: if isReviewer();
     }
 
+    // --- Company Data (cfg_*) — editable master data the tools read from; reviewer writes only ---
+    match /cfg_entities/{id} {
+      allow read: if isAllowlisted();
+      allow write: if isReviewer();
+      // Directors / Lines of Business / Signers (and any future subcollection).
+      match /{document=**} {
+        allow read: if isAllowlisted();
+        allow write: if isReviewer();
+      }
+    }
+    match /cfg_thresholds/{id} { allow read: if isAllowlisted(); allow write: if isReviewer(); }
+    match /cfg_approvals/{id}  { allow read: if isAllowlisted(); allow write: if isReviewer(); }
+    match /cfg_agents/{id}     { allow read: if isAllowlisted(); allow write: if isReviewer(); }
+    match /cfg_policies/{id}   { allow read: if isAllowlisted(); allow write: if isReviewer(); }
+
+    // Maker-checker queue: any allowlisted user proposes as themselves; only a reviewer transitions.
+    match /cfg_proposals/{id} {
+      allow read:   if isAllowlisted();
+      allow create: if isAllowlisted()
+        && request.resource.data.proposerEmail == email()
+        && request.resource.data.status == 'pending';
+      allow update: if isReviewer();
+      allow delete: if false;
+    }
+
     // --- audit: append-only, immutable ---
     match /audit/{id} {
       allow read: if isReviewer();

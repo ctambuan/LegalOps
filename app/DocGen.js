@@ -15,6 +15,7 @@ import {
 } from "../lib/docgen";
 import { DRIVE_UPLOAD_ENABLED, DRIVE_FOLDER_ID } from "../lib/config";
 import { mirrorRegisterToDrive, downloadRegisterCsv, registerSignature } from "../lib/docgenDrive";
+import { useCompanyData } from "../lib/companyData";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtInt = (n) => (n || n === 0 ? Number(n).toLocaleString("en-US") : "");
@@ -70,9 +71,11 @@ export default function DocGen({ tab, user, isReviewer, showToast }) {
 /* --------------------------------- Form --------------------------------- */
 function Form({ records, settings, user, showToast }) {
   const { getDriveAccessToken } = useAuth();
+  // Entities now come live from Company Data (seed fallback) — a newly-added entity is usable here at once.
+  const { entities: companyEntities } = useCompanyData();
   const blank = {
     date: today(), pic: settings.defaultPic || "", jira: "", department: "", docType: "",
-    category: "", title: "", entity: "", counterparty: "", signingMethod: "Electronic",
+    category: "", title: "", entity: "", entityCode: "", counterparty: "", signingMethod: "Electronic",
     valueCurrency: "USD", valueAmount: "", valueFrequency: "Annually", budgetStatus: "",
   };
   const [f, setF] = useState(blank);
@@ -132,7 +135,7 @@ function Form({ records, settings, user, showToast }) {
     try {
       const rec = {
         date: f.date, pic: f.pic, docType: f.docType, title: f.title.trim(),
-        entity: f.entity, signingMethod: f.signingMethod,
+        entity: f.entity, entityCode: f.entityCode || "", signingMethod: f.signingMethod,
         jira: isPolicy ? "" : f.jira.trim(),
         department: isPolicy ? "" : f.department,
         counterparty: isPolicy ? "" : f.counterparty.trim(),
@@ -152,7 +155,7 @@ function Form({ records, settings, user, showToast }) {
       const created = await createDocNumber(rec, user, settings);
       setResult(created);
       showToast(`Generated ${created.number}`);
-      setF((p) => ({ ...blank, date: p.date, pic: p.pic, department: p.department, docType: p.docType, entity: p.entity }));
+      setF((p) => ({ ...blank, date: p.date, pic: p.pic, department: p.department, docType: p.docType, entity: p.entity, entityCode: p.entityCode }));
     } catch (e) { console.error(e); showToast(e.message || "Generation failed"); }
     setBusy(false);
   };
@@ -175,7 +178,8 @@ function Form({ records, settings, user, showToast }) {
         <div className="field"><label>Document Type</label>
           <select value={f.docType} onChange={set("docType")}><option value="">Select…</option>{DOC_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
         <div className="field"><label>Pluang Entity</label>
-          <select value={f.entity} onChange={set("entity")}><option value="">Select…</option>{ENTITIES.map((e) => <option key={e.code} value={e.name}>{e.name} ({e.code})</option>)}</select></div>
+          <select value={f.entity} onChange={(e) => { const ent = companyEntities.find((x) => x.name === e.target.value); setF((p) => ({ ...p, entity: e.target.value, entityCode: ent?.code || "" })); }}>
+            <option value="">Select…</option>{companyEntities.map((e) => <option key={e._id || e.code} value={e.name}>{e.name} ({e.code})</option>)}</select></div>
       </div>
 
       {!isPolicy && (

@@ -306,3 +306,11 @@ details.filing[open] summary:before{content:"▾"}
   .two,.compare{grid-template-columns:1fr}
   h1{font-size:25px}
 }
+
+/* Company Data — entity profile key/value list */
+.kv{display:flex;flex-direction:column;gap:0;margin:0 0 16px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kvrow{display:grid;grid-template-columns:200px 1fr;gap:0}
+.kvrow+.kvrow{border-top:1px solid var(--line)}
+.kvrow dt{margin:0;padding:10px 14px;background:var(--paper);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-family:"IBM Plex Mono",monospace}
+.kvrow dd{margin:0;padding:10px 14px;color:var(--ink)}
+@media(max-width:720px){.kvrow{grid-template-columns:1fr}.kvrow dd{padding-top:0}}
