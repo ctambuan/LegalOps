@@ -1,8 +1,8 @@
 # Product Requirements Document — Company Data Module (formerly "Settings")
 
-**Status:** PROPOSED — v2.2 (design-reviewed). User Management decisions resolved (approved domains + zero-cost Gmail invite); invite email drafted (Appendix A). Not yet built.
-**Product positioning:** A new top-level module for the **Legal Operations Workbench** — a centralised, governed **Company Data** layer (the source of truth) that every other tool reads from, plus the access-control surface for the whole workbench. Sibling to the live **Contracting Engine** and **Document Number Generator** (see `PRD_Clause_Workbench.md`).
-**Owner (Product):** the reviewer (owner) — Head of Legal, [Company]
+**Status:** BUILT & DEPLOYED — v3.6. Phases 1–3 shipped and merged to `main` (PRs #40–#44); Firestore rules published to project `legalops2026`. **Sections 1–17 below describe the as-built system** and are kept in lockstep with the code; the **Change Log (Section 18)** is the authoritative chronological record. Remaining work (all optional, flagged for cost): populate data, Risk Register module, semantic embeddings, OCR — see Section 17.
+**Product positioning:** A top-level module of the **Legal Operations Workbench** — a centralised, governed **Company Data** layer (the source of truth) every other tool reads from, plus the workbench's access-control surface and its AI agents. Sibling to the live **Contracting Engine** and **Document Number Generator** (see `PRD_Clause_Workbench.md`).
+**Owner (Product):** the owner — General Counsel, [Company]
 **Author (Eng):** AI senior product engineer (working drafts; not a Legal Department position)
 **Classification:** Confidential & Legally Privileged — [Company] internal use only
 **Source of truth (today, to be migrated):** hardcoded arrays in `lib/docgen.js` (`ENTITIES`, `DEPARTMENTS` + approvers, `CABINETS`, `DOC_TYPES`, `CURRENCIES`); the `allowlist` collection (`firestore.rules:9`); and the `2026_Corporate_Database_Control` workbook (Board Members, Business License, Corporate Approval Tracker sheets).
@@ -69,32 +69,40 @@ changes propagating live to every tool, and uploaded policies forming a trustwor
 
 ## 3. Users, Roles & Governance (Maker-Checker)
 
-| Role | Who | Capabilities |
+Group RBAC + per-company scope. One role per account, applied across one or more companies
+(`companies` = `"all"` or an array of entity codes). Capability helpers in `lib/constants.js` **mirror
+`firestore.rules`** (the boundary): `isGC` / `hasCompany` / `isApproverFor` / `isMakerFor`.
+
+| Role (stored key) | Capability | Scope |
 |---|---|---|
-| Contributor (Counsel) | Named legal / compliance / product team on the allowlist | Read all Company Data; **propose** Add / Edit / Archive on any record; see status of own proposals; consume the data through every tool |
-| Reviewer / Head of Legal (Admin) | Workspace owner and any designated deputy | All Contributor rights + **approve / reject** proposed changes; **direct edit** (own edits apply immediately, self-audited); upload & index policies; manage agents; **manage users (Team & Access)** |
-| (Implicit) Unauthorised | Not on the allowlist | No access — blocked at Auth and rules |
+| **General Counsel** (`gc`) | Super-admin: approve anything, edit live, manage users & company grants, tune agents, manage policies | Group (all companies) |
+| **Regional Counsel** (`regional`) | Maker — proposes changes | Group (all companies) |
+| **Head of Legal** (`hol`) | Approver + direct editor, for its companies | Per-company (assigned) |
+| **Country Counsel** (`country`) | Maker — proposes changes | Per-company (assigned) |
+| (Implicit) Unauthorised | No access — blocked at Auth and rules | — |
 
-**Maker-checker flow (reused from the Contracting Engine):** counsel edits a record and clicks **Submit
-for approval** → a `cfg_proposals` doc (`status: pending`) captures before/after → the record shows
-"Pending approval" to the proposer → the Head of Legal sees a **Change Requests** queue with a
-side-by-side diff and an impact summary → **Approve** applies to live; **Reject** returns with a note;
-both audited. The Head of Legal's own edits apply immediately (they are the checker) and are audited.
+Legacy `reviewer`/`contributor` (the original owner's account) normalise to **GC**.
 
-**User management is an admin function, NOT maker-checker:** adding/removing users is a direct,
-reviewer-only control action (access control should not sit in a proposal queue). See Section 13.
+**Maker-checker flow:** a maker edits a record and clicks **Submit for approval** → a `cfg_proposals` doc
+(`status: pending`, carrying its `company`) captures before/after → the proposer sees a "pending" marker →
+an approver for that company (its Head of Legal, or the GC) sees the **Change Requests** queue with a
+side-by-side diff → **Approve** writes it live; **Reject** returns a note; both audited. **No self-approval**
+(GC is the backstop). GC and in-scope Heads of Legal edit directly (audited).
+
+**User management is GC-only and direct** (not maker-checker) — access control does not sit in a proposal
+queue. See Section 13.
 
 ## 4. Source-of-Truth & Migration Principle
 
-- Hardcoded arrays in `lib/docgen.js` become **seed data** (`data/company.seed.json`), loaded once per
-  collection via a server route, mirroring the clause pattern (`/api/seed` + `seedClausesViaApi`,
-  `lib/data.js:103`).
-- After seeding, the Firestore `cfg_*` collections are authoritative. Pure formula functions in
-  `lib/docgen.js` stay pure and are fed live data instead of module-level arrays.
-- **Fallback:** the consumption hook returns seed constants when a collection is empty, so the Document
+- The hardcoded arrays in `lib/docgen.js` (`ENTITIES`, `DEPARTMENTS` + approvers) are the **seed/fallback**.
+  The GC populates the editable collections with a one-click **"Load defaults"** in Entities / Approval
+  Policy (a client-side seed write) — no separate seed file or server route.
+- The Firestore `cfg_*` collections are then authoritative. Pure formula functions in `lib/docgen.js` stay
+  pure and are fed live data via `useCompanyData()` instead of the module-level arrays.
+- **Fallback:** `useCompanyData()` returns the seed constants when a collection is empty, so the Document
   Number Generator works from first deploy through full population.
-- Every record carries `status` (`active`|`archived`), `updatedBy`, `updatedAt`. Deletes are
-  archive-first; hard delete is reviewer-only and blocked when references exist.
+- Records carry `status` (`active`|`archived`), `updatedBy`, `updatedAt`. Records are **archive-first**
+  (Restore available); subcollection rows support direct delete.
 
 ## 5. Information Architecture
 
@@ -125,97 +133,128 @@ COMPANY DATA
 > *Approval routing* = who must **sign off internally** to enter into a document, by value and
 > department. *Authorized signers* (under each Entity) = who may **legally sign** on the entity's behalf.
 
-## 6. Interaction Grammar (consistent, but right-sized to the data)
+## 6. Interaction Grammar (as built)
 
-One consistent grammar — list → open → edit → submit → toast → audit — with the container sized to the
-record:
-- **Simple records** (approver route, director, signer, user): right-side **drawer**.
-- **Rich records** (an entity with its children): a full **detail page**.
-- **List views** reuse `.toolbar` / `.dtable`; each has search, an item count, a primary **`+ Add`**, and
-  per-row **✎ Edit** + **Archive/Delete** (Section 7).
-- **Save** for counsel = **"Submit for approval"**; for the Head of Legal = applies live. Both toast + audit.
-- **Dirty-state guard**, **visible "Last changed by X on Y" + Revert**, **empty/first-run states**, and a
-  **cross-domain global search** ("find *Lindawati* anywhere").
+One consistent grammar — list → open → edit → submit → toast → audit:
+- **Lists** reuse `.toolbar` / `.dtable` with search + counts; a **rich record** (an entity and its
+  children) opens as a full **detail page**; simpler records use a modal.
+- **Save** for a maker = **"Submit for approval"** (creates a proposal); for an in-scope approver = applies
+  live. Both toast + `audit()`.
+- Empty/first-run states on the main areas; Archive/Restore with truthful verbs (Section 7).
+- *Deferred niceties (not yet built):* a cross-domain global search, an explicit dirty-state guard, and an
+  inline per-record "last changed / revert" surface (the append-only `audit` collection records every
+  change; it is not yet surfaced in the record UI).
 
-## 7. Delete vs Archive (telling the truth)
+## 7. Delete vs Archive (as built)
 
-- Default destructive action is **Archive** (reversible; `status:archived`; hidden from pickers, retained
-  for references). Archived items appear under an **Archived** filter and can be **Restored**.
-- True **Delete** (irreversible) appears **only** when a reference check finds the record is used nowhere
-  live, clearly labelled permanent. Archiving/deleting a referenced record is blocked with a plain
-  explanation. Icons/verbs match behaviour.
+- Records use **Archive** (reversible; `status:"archived"`; hidden from pickers, retained for references)
+  with **Restore** — the default for entities and policies; truthful verbs/icons (no trash icon that
+  secretly archives).
+- Subcollection rows (directors / lines of business / signers) support a direct **Delete** (they are not
+  referenced elsewhere). A reference-checked hard delete of top-level records is not implemented — archive
+  is the safe default.
 
-## 8. Data Model
+## 8. Data Model (as built)
 
-Reviewer-writable / allowlisted-readable, prefixed `cfg_`. Counsel mutate them only via `cfg_proposals`.
+Prefixed `cfg_*`. Reads are allowlisted (entities/approvals group-wide; **policies are read-scoped**);
+writes are capability-gated in `firestore.rules`. Makers mutate records only via `cfg_proposals`.
 
-### ① Records — `cfg_entities/{entityId}`
+### ① Records — `cfg_entities/{code}` (doc id = entity code)
 ```
-{ code:"BSC", name:"PT Bumi Santosa Cemerlang", jurisdiction:"Indonesia", address,
-  registrationType:"NIB", registrationNo:"9120105122415", baseCurrency:"IDR",
-  status:"active", updatedBy, updatedAt }
-   └─ directors/{id}: { name, title, appointmentDate, validity, privyId, fitProperDecreeNo, status }
-   └─ lob/{id}:       { code:"66153", description, licenseName, issuingAuthority, validityPeriod, status }
-   └─ signers/{id}:   { signerName, title, maxThresholdUsd, jointWith:[signerId]|null, validFrom, validTo, status }
+{ code, name, jurisdiction, address, registrationType, registrationNo, baseCurrency,
+  entityType:"holding"|"controlled"|"non_controlled"|"", status:"active"|"archived", updatedBy, updatedAt }
+   └─ directors/{id}: { name, title, appointmentDate, validity, privyId, status }
+   └─ lob/{id}:       { code, description, licenseName, issuingAuthority, validityPeriod, status }
+   └─ signers/{id}:   { signerName, title, maxThresholdUsd, validFrom, validTo, status }
 ```
 ### ② Approval Policy
-- `cfg_thresholds/bands` → `{ bands:[{ id, label, maxUsd }], effectiveFrom, updatedBy, updatedAt }`
-- `cfg_approvals/{id}` → `{ department, departmentCode, bandId, approver, status }`
+- `cfg_thresholds/bands` → `{ low, high, updatedBy, updatedAt }` (the two USD band ceilings).
+- `cfg_approvals/{deptCode}` → `{ department, departmentCode, admin, low, mid, high, updatedBy, updatedAt }`.
 
 ### ③ AI & Knowledge
-- `cfg_agents/{agentId}` → `{ name, instructionTemplateId, instruction, guardrails, model:"claude-opus-4-8", policyScope:[policyId]|"all", status, updatedBy, updatedAt }`
-- `cfg_policies/{policyId}` → `{ title, category, jurisdiction, fileRef, version, effectiveDate, status:"uploaded"|"extracted"|"indexing"|"indexed"|"older", extractionApprovedBy, chunkCount, indexedAt, updatedBy, updatedAt }`
+- Agent roster is **fixed in code** (`lib/agentTemplates.js`); `cfg_agents/{presetId}` stores GC **overrides
+  only**: `{ instruction?, model?, enabled, updatedBy, updatedAt }`.
+- `cfg_policies/{id}` → `{ title, category, scope:"group"|"company", company, version, effectiveDate,
+  sourceName, sourceFileId, sourceUrl, status, chunkCount, createdBy, updatedAt }`
+   └─ chunks/{id}: `{ ord, text, scope, company, title }` (scope/company/title denormalised for rules + citation).
 
-### ④ Team & Access — `allowlist/{emailLower}` (existing collection, extended)
+### ④ Team & Access — `allowlist/{emailLower}`
 ```
-{ email:"jane@pluang.com", role:"contributor"|"reviewer", status:"invited"|"active"|"suspended",
-  displayName, invitedBy, invitedAt, firstSignInAt, lastSignInAt, updatedBy, updatedAt }
+{ email, role:"gc"|"regional"|"hol"|"country", companies:"all"|[code…],
+  status:"invited"|"active", displayName, invitedBy, invitedAt, lastSignInAt, updatedBy, updatedAt }
 ```
-*Doc id is the lowercased email, matching `email()` in the rules. Written only by the server route
-(Section 13), never the client.*
+*Doc id = lowercased email (matches `email()` in rules). Written by the GC's own client session, governed
+by rules — there is no Admin SDK (org policy blocks service-account keys).*
 
 ### Governance — `cfg_proposals/{id}`
 ```
-{ domain, targetId|null, action:"create"|"update"|"archive", before, after, impact,
-  status:"pending"|"approved"|"rejected", proposerEmail, reviewNote, reviewerEmail, createdAt, reviewedAt }
+{ domain:"entity", action:"create"|"update"|"archive", targetId, company, label, before, after,
+  status:"pending"|"approved"|"rejected", proposerEmail, proposerName, reviewerEmail, reviewNote, createdAt, reviewedAt }
 ```
 
-## 9. Consumption Layer
+## 9. Consumption Layer (as built)
 
-- One hook **`useCompanyData()`** subscribes (`onSnapshot`) to the live `cfg_*` collections and exposes
-  `{ entities, directorsByEntity, lobByEntity, signersByEntity, approvalBands, approvals, agents,
-  policies }`, each with seed fallback.
-- Data-access functions sit beside `listenDocgenSettings`/`saveDocgenSettings` (`lib/data.js:209`),
-  routing counsel writes through `cfg_proposals` and applying approved changes live, with `audit()`.
-- The **Document Number Generator** migrates its entity dropdown, approver routing, and threshold bands
-  to `useCompanyData()`. Contracting, Budget and Task Tracker read from the same hook.
+- One hook **`useCompanyData()`** (`lib/companyData.js`) subscribes (`onSnapshot`) to the live `cfg_*`
+  collections and exposes `{ entities, approvals, thresholds, seeded, loading }`, each falling back to the
+  `lib/docgen.js` seed when empty.
+- Data-access functions live beside `listenDocgenSettings`/`saveDocgenSettings` in `lib/data.js`: makers'
+  writes route through `cfg_proposals`; approval applies the change live; all `audit()`-logged.
+- The **Document Number Generator** reads its entity picker, approver routing and threshold bands live from
+  `useCompanyData()` (with seed fallback) — the first single-source-of-truth consumer.
 
-## 10. Approval-Threshold Safety
+## 10. Approval-Threshold Safety (as built)
 
-- Threshold/route edits show an **impact preview** before submission and again at approval (e.g. "alters
-  routing for 25 departments; would have routed N of the last 12 months' documents differently").
-- Bands strictly ascending by `maxUsd` (inline-validated). Signer `maxThresholdUsd` warned if above the
-  entity's top band. Thresholds are USD; each entity declares `baseCurrency`; the FX assumption
-  (`/api/fxrate`) is stated at the edit point. Threshold changes carry `effectiveFrom`; historical
-  `docnumbers` retain the `approvers` computed at generation.
+- Approval **thresholds and per-department routing are GC-only** (group config, `firestore.rules`),
+  edited directly in Approval Policy.
+- A **consequence confirmation** is shown before saving a threshold change ("changes routing for all
+  future agreements; existing records keep the approver recorded at generation"). The full historical
+  impact preview (re-routing counts over past `docnumbers`) remains OI5.
+- Bands validated ascending (`high > low > 0`). Routing is **band-key based** (`valueBucketKey` /
+  `bucketLabel` / `approverCell` in `lib/docgen.js`) so editing the numbers can never desync routing.
+  Historical `docnumbers` retain the `approvers` computed at generation.
 
-## 11. Policy RAG — Trust by Design
+## 11. Policy Library & Retrieval (RAG — as built)
 
-1. **Upload** → Drive (`drive.file`, `lib/driveUpload.js`) or Firebase Storage; row `status:"uploaded"`.
-2. **Extraction-preview gate** (`/api/policy/extract`): extracted text shown to the reviewer to confirm
-   before use (guards mangled tables / bad OCR) → `status:"extracted"`.
-3. **Index** (`/api/policy/index`): chunk → embed (recommend **Voyage AI**; Cohere alt) → **Firestore
-   vector search** (native; right-sized for dozens–hundreds of policies) → `status:"indexed"`.
-4. **Retrieve + generate**: Agent embeds the query, pulls top-k chunks within `policyScope`, passes to
-   **Claude** (`claude-opus-4-8`, via `/api/assist` + the agent's `instruction`). Every answer shows
-   **source policy + section + version**, under the "verify before relying" guardrail.
-5. **Versioning**: re-upload supersedes and flags the old one `older`; answers warn on superseded sources.
+1. **Ingest** (GC): add a policy with title / category / **scope (group or a company)** / effective date and
+   its text — **paste, .txt, or upload PDF/DOCX** (extracted server-side at `/api/policy/extract` via
+   `unpdf` / `mammoth`). The text box is the **extraction-preview gate** — confirm it reads correctly first.
+2. **Chunk + store:** on save the text is chunked (`lib/policy.js` `chunkText`) into the `chunks`
+   subcollection (scope/company/title denormalised). The original file is archived to Drive when
+   `DRIVE_UPLOAD_ENABLED` (↗ link shown); the extracted text is the retrieval source of truth.
+3. **Retrieve (client-side, lexical):** `retrievePolicyContext` loads the policies the user may see (group +
+   their companies), ranks chunks by lexical overlap with the question, returns top-k + a sources list. **No
+   embeddings / vector index / extra key** (cost decision, CLAUDE.md #4); semantic embeddings are a clean
+   future upgrade (OI2).
+4. **Generate:** chunks pass to **Claude** via `/api/assist` (`agent` mode) under the fixed guardrail
+   preamble; the agent answers **only from context** and **cites `[n]` sources** (shown under the answer),
+   or says the answer isn't stored.
+5. **Scoping:** company policies and their chunks are readable **only in-scope** (rules); group policies by
+   all. *Not yet:* versioning/supersede flags; OCR for scanned/image-only PDFs (paste fallback covers them).
 
-## 12. Agents — Safe Authoring for Non-Engineers
+## 12. Agents — Fixed Preset Roster (as built)
 
-- Agents built from **instruction templates** with baked-in guardrails, not a naked prompt box.
-- A **test sandbox** runs the agent on a sample question + scope and shows the cited answer **before
-  saving**. Model defaults to `claude-opus-4-8`; `policyScope` constrains retrieval.
+A **fixed roster of 7 presets** in `lib/agentTemplates.js`. GC may **tune** each agent's instruction + model
+and **enable/disable** it (overrides in `cfg_agents/{presetId}`; reset = delete the override) — but cannot
+add or delete agents. Each run is **one capped Claude call on an explicit user action** (no background AI).
+The server prepends non-negotiable guardrails (trusted-sources-only / working-draft / no-fabrication) to
+every agent's instruction.
+
+**Cost discipline (CLAUDE.md #4):** default models are Haiku/Sonnet (**never Opus by default** — GC opts in
+per appetite); per-agent `max_tokens` caps; extended thinking only where it pays; prompt caching on.
+
+| Agent | Grounded in |
+|---|---|
+| Document Processing (draft / review / standard docs / approval-signing routing) | the user's input |
+| Corporate Secretarial | live entities / directors / lines of business |
+| Compliance & Licence Watch | live licence records (lines of business) |
+| Legal Risk Analyst | the user's input (no risk-register collection yet) |
+| Report Generator | the matters provided |
+| Legal Intake Triage | the request provided |
+| **Ask Legal** | **policies (retrieved) + entities + approval matrix + signers** |
+
+Structured grounding (`lib/structuredContext.js`) is scope-aware and client-side. A **test sandbox** lets GC
+run an agent before saving; a **Try** runner lets any allowlisted user run an enabled agent. Answers carry
+the "working draft — verify before relying" guardrail.
 
 ## 13. User Management (Team & Access)
 
@@ -224,11 +263,12 @@ and already exist. "Adding a user" = **pre-authorize an email + send an invite**
 with their existing Google account; **Firebase Auth auto-provisions their app user on first sign-in**;
 Firestore rules let them in because their email is on the `allowlist`.
 
-**Who can manage:** Head of Legal (reviewer/admin) only. This is a direct admin action, not maker-checker.
+**Who can manage:** the **General Counsel** only. A direct admin action, not maker-checker.
 
 **Add-user journey (decisions: auto-invite + domain-restricted):**
-1. Admin opens **Team & Access → `+ Add user`**, enters an email and picks a role
-   (Contributor / Reviewer).
+1. The GC opens **Team & Access → `+ Add user`**, enters an email, picks a **role** (General Counsel /
+   Regional Counsel / Head of Legal / Country Counsel) and, for the per-company roles, **ticks the
+   companies** in scope.
 2. The email is validated against the **approved-domain allowlist**
    (`ALLOWED_USER_DOMAINS = pluang.com, batubara-id.com`). Off-domain emails are rejected with a clear
    message — protecting privileged legal data from typos and outside addresses.
@@ -250,95 +290,98 @@ Firestore rules let them in because their email is on the `allowlist`.
 **Team & Access list view:** email · display name (once known) · role · status (Invited/Active/Suspended)
 · last sign-in · actions (**Change role**, **Resend invite**, **Suspend/Revoke**).
 
-**Revoke / off-board:** removing or suspending a user deletes/flags the `allowlist` doc **and** revokes
-their Firebase refresh tokens via the Admin SDK, so access is cut promptly rather than lingering until
-token expiry.
+**Revoke / off-board:** removing a user **deletes their `allowlist` doc**; with no allowlisted record the
+Firestore rules deny them on their next token refresh / sign-in. (No Admin SDK, so server-side refresh-token
+revocation isn't available; access ends at token refresh, typically within the hour.)
 
 **Guardrails:**
-- **No self-lockout:** an admin cannot remove or demote themselves, and the **last remaining reviewer**
+- **No self-lockout:** the GC cannot demote or remove their own account, and the **last remaining GC**
   cannot be removed/demoted.
-- Email normalized to lowercase to match `email()` in the rules.
-- Domain restriction enforced **server-side** (not just the form).
-- Every add / role-change / resend / revoke is `audit()`-logged (actor, target email, change).
+- Email normalised to lowercase to match `email()` in the rules.
+- Domain restriction enforced in **`firestore.rules`** (the boundary) and the form.
+- Every add / role-change / resend / revoke is `audit()`-logged.
 
-## 14. Firestore Rules (additions)
+## 14. Firestore Rules (the security boundary — as built)
 
-Live company data mirrors `docgen_settings` (reviewer write, allowlisted read). For the **`allowlist`**,
-since there is no Admin SDK, the **rules themselves are the boundary**: reviewer-only create/update/delete
-with an approved-domain check and no self-demote / self-delete; the owning user may read their own doc and
-stamp only their sign-in metadata. (Implemented as shipped — see `firestore.rules`.)
+No Admin SDK exists (org policy blocks service-account keys), so **all authorization is enforced in
+`firestore.rules`**, never client-only. Helpers each read the caller's `allowlist` doc: `isGC`,
+`hasCompany(c)`, `isApproverFor(c)`, `isMakerFor(c)` (`isReviewer` is a GC alias for the legacy modules).
 
-```
-match /cfg_entities/{id}  { allow read: if isAllowlisted(); allow write: if isReviewer();
-  match /directors/{d} { allow read: if isAllowlisted(); allow write: if isReviewer(); }
-  match /lob/{l}       { allow read: if isAllowlisted(); allow write: if isReviewer(); }
-  match /signers/{s}   { allow read: if isAllowlisted(); allow write: if isReviewer(); }
-}
-match /cfg_thresholds/{id}{ allow read: if isAllowlisted(); allow write: if isReviewer(); }
-match /cfg_approvals/{id} { allow read: if isAllowlisted(); allow write: if isReviewer(); }
-match /cfg_agents/{id}    { allow read: if isAllowlisted(); allow write: if isReviewer(); }
-match /cfg_policies/{id}  { allow read: if isAllowlisted(); allow write: if isReviewer(); }
+- **`allowlist`** — read own doc, or any if GC; create/update/delete **GC-only**, approved-domain check,
+  role ∈ the four roles, **no self-demote/self-delete**; the owning user may update only their own sign-in
+  metadata (never role/companies/email).
+- **`cfg_entities`** (+ directors/lob/signers) — read: allowlisted; create: GC; update/archive + subcollections:
+  `isApproverFor(entity code)`.
+- **`cfg_thresholds` / `cfg_approvals` / `cfg_agents`** — read: allowlisted; write: GC.
+- **`cfg_policies` (+ `chunks`)** — **read-scoped**: `scope == 'group' || hasCompany(company)`; write: GC.
+- **`cfg_proposals`** — read: allowlisted; create: a maker in scope, `proposerEmail == self`,
+  `status == 'pending'`, and `company == targetId` for update/archive; update (approve/reject):
+  `isApproverFor(company)` **and not the proposer** (GC backstop); delete: never.
 
-match /cfg_proposals/{id} {
-  allow read:   if isAllowlisted();
-  allow create: if isAllowlisted() && request.resource.data.proposerEmail == email()
-                && request.resource.data.status == 'pending';
-  allow update: if isReviewer();   // approve / reject only
-  allow delete: if false;
-}
+The canonical rules live in `firestore.rules`; deploy via the Firebase Console (project `legalops2026`).
 
-// allowlist: unchanged — server (Admin SDK) only; readable by the owning user to resolve own role
-match /allowlist/{e} { allow read: if isSignedIn() && e == email(); allow write: if false; }
-```
-Policy chunks/vectors are written by server routes via the Admin SDK; not client-writable.
+## 15. Functional Requirements (as built)
 
-## 15. Functional Requirements
-
-- FR1. Top-level **Company Data** module; three worlds + admin-only Team & Access and Change Requests.
-- FR2. Entity detail **page** (Profile / Directors / Lines of Business / Authorized Signers); Add/Edit/
-  Archive on each (counsel → proposal; reviewer → live).
-- FR3. Approval Policy: thresholds (ascending-validated, impact preview, effective date) + drill-down
-  routing; plain-language signer-vs-approval framing.
-- FR4. Agents: templated instruction + guardrails + **test sandbox**; model & policy scope.
-- FR5. Policy Library: upload → **extraction-preview gate** → index → use; version/source on answers.
-- FR6. **User Management**: admin adds users by email (domain-restricted), assigns role, auto-sends an
-  invite email; list shows status + last sign-in; change-role / resend / revoke; no self-lockout; all
-  via the Admin-SDK server route; fully audited.
+- FR1. Top-level **Company Data** module; areas: Entities, Approval Policy, AI & Knowledge, Team & Access
+  (GC), Change Requests (approvers).
+- FR2. Entity detail **page** (Profile / Directors / Lines of Business / Authorised Signers) with group
+  classification; Add/Edit/Archive (in-scope approver → live; maker → proposal).
+- FR3. Approval Policy: GC-edited thresholds (ascending-validated, consequence confirmation) + per-department
+  routing; consumed live by the Document Number Generator.
+- FR4. **Fixed 7-agent roster**; GC tunes instruction + model and enables/disables; test sandbox; any
+  allowlisted user runs an enabled agent; server-side guardrails + cost caps.
+- FR5. **Policy Library**: ingest by paste / .txt / PDF / DOCX (server-side extraction) → preview → chunk →
+  store; Drive-archived source; **lexical retrieval** grounds Ask Legal with `[n]` citations; read-scoped.
+- FR6. **User Management (GC-only)**: add users by email (domain-restricted), assign role + company scope,
+  auto-invite (Gmail) or copy-link; status + last sign-in; change-access / resend / revoke; no self-lockout;
+  client writes governed by rules; audited.
 - FR7. `useCompanyData()` consumption layer with seed fallback; Document Number Generator rewired.
-- FR8. Maker-checker: proposals + reviewer queue with diff + impact; approve/reject; pending state shown.
-- FR9. Archive-first with reference checks and Restore; truthful icons/verbs; hard delete only unreferenced.
-- FR10. Dirty-state guard; visible "last changed / revert"; empty/first-run states; global search.
-- FR11. All writes (propose, approve, reject, direct edit, archive, policy index, user add/role/revoke) audited.
+- FR8. Maker-checker: scoped proposals + scoped Change Requests queue with diffs; approve/reject; no
+  self-approval; pending markers.
+- FR9. Archive-first with Restore; truthful icons/verbs.
+- FR10. Agents grounded in live structured data (entities / approvals / signers / LoB), scope-aware.
+- FR11. All writes (propose, approve, reject, direct edit, archive, policy ingest, user add/role/revoke,
+  agent tune) audited.
 
-## 16. Phased Rollout
+## 16. Phased Rollout (status)
 
-1. **Phase 1 — Spine + records + approval policy + maker-checker + User Management.** Company Data nav
-   and IA; migrate Entities (+Directors, +LoB, +Signers) and Approval Policy to `cfg_*` seeded from
-   `lib/docgen.js`; build `useCompanyData()` + fallback; stand up `cfg_proposals` + Change Requests queue;
-   build **Team & Access** + the `/api/users` admin route + invite email; rewire the Document Number
-   Generator. Ships the trust/safety basics. *(User Management can land first within Phase 1, since the
-   team must be onboarded to use everything else.)*
-2. **Phase 2 — Agents:** templated agents + test sandbox, wired into `/api/assist`.
-3. **Phase 3 — Policy RAG:** upload → extraction-preview → index → retrieve, with answer provenance.
+1. **Phase 1 — Records + Approval Policy + maker-checker + RBAC + User Management.** ✅ BUILT & DEPLOYED
+   (PRs #40–#42; rules published to `legalops2026`).
+2. **Phase 2 — Agents** (fixed cost-disciplined roster, tune + test sandbox). ✅ BUILT & DEPLOYED (PR #41).
+3. **Phase 3 — Policy Library + retrieval (RAG)**, PDF/DOCX ingest, Drive source, structured-data grounding.
+   ✅ BUILT & DEPLOYED (PRs #42–#44).
+
+**Optional next:** Risk Register module (then ground Legal Risk Analyst); semantic embeddings (if lexical
+proves too blunt — has cost); OCR for scanned PDFs (has cost). All flagged for cost per CLAUDE.md #4.
 
 ## 17. Open Items
 
-- OI1. **Reviewer self-edit vs self-proposal** for *thresholds* — confirm whether even reviewer threshold
-  edits should pass through the queue for a second pair of eyes.
-- OI2. **Embedding provider & cost** (Voyage vs Cohere); key handling alongside `ANTHROPIC_API_KEY`.
-- OI3. **Policy storage** — Drive (`drive.file`) vs Firebase Storage; decide at Phase 3.
-- OI4. **Workbook importer** for Directors / LoB / current approvers, vs manual entry.
-- OI5. **Impact-preview depth** — exact vs approximate re-routing counts over historical `docnumbers`.
-- OI6. **Approved user domains** — RESOLVED (2026-06-05): `ALLOWED_USER_DOMAINS = pluang.com,
-  batubara-id.com`. Enforced server-side in `/api/users`.
-- OI7. **Invite email mechanism** — RESOLVED (2026-06-05): send **as the signed-in admin via the Gmail
-  API** (`gmail.send` scope on the existing Google OAuth) — zero cost, no third-party service. App-Password
-  + SMTP is the fallback. Draft wording in Appendix A (subject to final Head-of-Legal approval).
-- OI8. **Off-domain exceptions** (external counsel/contractors) — if ever needed, define an explicit
-  per-user override path, since the default policy is domain-restricted.
+- OI1. **Second-pair-of-eyes on thresholds** — thresholds/routing are GC-only **direct** with a consequence
+  confirmation; an approval gate on them is not implemented. Open if desired.
+- OI2. **Semantic embeddings** — deferred by design; retrieval is lexical (free). Revisit (Voyage/Cohere) only
+  if quality demands — has cost.
+- OI3. **Policy source storage** — RESOLVED: original file archived to Drive (`drive.file`) when enabled;
+  extracted text in Firestore is the retrieval source of truth.
+- OI4. **Workbook importer** for Directors / LoB / current approvers, vs manual entry — open.
+- OI5. **Impact-preview depth** — historical re-routing counts over `docnumbers` (today: a consequence
+  confirmation only) — open.
+- OI6. **Approved user domains** — RESOLVED: `pluang.com, batubara-id.com`, enforced in `firestore.rules` + form.
+- OI7. **Invite email** — RESOLVED: sent as the signed-in GC via the Gmail API (`gmail.send`), gated by
+  `NEXT_PUBLIC_USER_INVITE_EMAIL`; copy-link fallback otherwise. Template in Appendix A.
+- OI8. **Off-domain exceptions** (external counsel/contractors) — open; default policy is domain-restricted.
+- OI9. **Risk Register module** — needed to ground the Legal Risk Analyst agent in structured data — open.
+- OI10. **Per-company read-scoping beyond policies** — entities/approvals are group-readable by all allowlisted
+  (accepted for now); revisit if any entity-level data becomes confidential per company.
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.7 — **PRD body synced to as-built**) — Rewrote Sections 1–17 to match the shipped system
+  (the body had lagged the change log): status → BUILT & DEPLOYED; 4-role RBAC + company scope (§3); as-built
+  data model incl. `cfg_*` overrides + policy chunks (§8); consumption hook surface (§9); GC-only direct
+  thresholds + band-key routing (§10); lexical RAG + PDF/DOCX/Drive ingest (§11); fixed 7-preset roster +
+  structured grounding (§12); user management as client-rules (no Admin SDK) with correct revoke semantics
+  (§13); rules summary as shipped (§14); FRs/Phasing/Open-Items refreshed (§15–17, added OI9 Risk Register,
+  OI10 read-scoping); Appendix A notes corrected. No code change.
 - 2026-06-06 (v3.6 — **Agents grounded in structured data**) — `lib/structuredContext.js` builds a
   compact, **scope-aware** context from the live `cfg_*` records (entities, directors, lines of business,
   approval thresholds + matrix, authorised signers); company-scoped roles see only their companies'
@@ -480,8 +523,9 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## Appendix A — Invite email template
 
-Sent automatically when an admin adds a user. Merge fields in `{{double braces}}` are filled by
-`/api/users`. Sent from the admin's own Gmail address (so replies reach them).
+Sent when the GC adds a user (if `NEXT_PUBLIC_USER_INVITE_EMAIL` is on; otherwise a copy-link is shown).
+Merge fields in `{{double braces}}` are filled client-side from the Add-user form. Sent from the GC's own
+Gmail address via the `gmail.send` scope (so replies reach them).
 
 **Subject:** You've been granted access to the [Company] Legal Operations Workbench
 
@@ -514,7 +558,7 @@ received this in error, please delete it and notify the sender.
 ```
 
 **Notes**
-- `{{role}}` renders as a friendly label — "Team Member (Contributor)" or "Head of Legal (Reviewer)".
+- `{{role}}` renders as a friendly label — General Counsel / Regional Counsel / Head of Legal / Country Counsel.
 - An optional one-line **personal note** field on the Add-user form, if filled, is inserted above the
   "To get in" steps.
 - A **Resend invite** action re-sends this same template unchanged.
