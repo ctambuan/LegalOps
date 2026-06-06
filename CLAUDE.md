@@ -33,7 +33,7 @@ design, architect, and build in this repository. Follow it unless the user overr
   lowercased email) holding `{ role, companies }`. Roles: **gc** (General Counsel, super-admin, group),
   **regional** (Regional Counsel, maker, group), **hol** (Head of Legal, approver+editor, per-company),
   **country** (Country Counsel, maker, per-company). `companies` is `"all"` or an array of entity codes.
-  Legacy `reviewer`/`contributor` normalise to `gc`/`regional`. Capability helpers live in `lib/constants.js`
+  Legacy `reviewer`/`contributor` (the original owner's account) both normalise to `gc`. Capability helpers live in `lib/constants.js`
   (UI) and **mirror `firestore.rules` (the boundary)**: `isGC`, `hasCompany`, `isApproverFor`, `isMakerFor`.
   Key invariants: only GC manages users & grants (no privilege escalation by others); approvals are
   company-scoped (GC, or that company's Head of Legal) with **no self-approval**; scope is enforced in

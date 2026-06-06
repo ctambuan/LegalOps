@@ -13,11 +13,12 @@ service cloud.firestore {
     function myRole() { return isAllowlisted() ? alData().role : ''; }
     function myCompanies() { return isAllowlisted() ? alData().companies : []; }
 
-    // General Counsel = super-admin (group). Legacy 'reviewer' role / custom claim normalise to GC.
+    // General Counsel = super-admin (group). The custom claim and the legacy 'reviewer'/'contributor'
+    // roles (the original owner's account) normalise to GC.
     function isGC() {
       return isSignedIn() && (
         request.auth.token.reviewer == true ||
-        (isAllowlisted() && (alData().role == 'gc' || alData().role == 'reviewer'))
+        (isAllowlisted() && (alData().role == 'gc' || alData().role == 'reviewer' || alData().role == 'contributor'))
       );
     }
     // Company scope: companies == 'all' (group) or a list of entity codes. GC covers everything.
