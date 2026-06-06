@@ -339,6 +339,15 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.1 — **Agents → fixed preset roster + cost discipline**) — Reworked Agents from
+  free-create to a **fixed roster of 10 presets** defined in `lib/agentTemplates.js` (Contract Drafting,
+  Redline Reviewer, NDA/Std-Doc Drafter, Corporate Secretarial, Approval & Signing Router, Compliance &
+  Licence Watch, Risk Analyst, Policy & Playbook Q&A, Weekly Report/LSRM, Intake Triage). GC may **tune**
+  each agent's instruction + model and **enable/disable** it (overrides in `cfg_agents/{presetId}`; reset
+  to default = delete override) — but cannot add/delete agents. **Cost discipline (CLAUDE.md #4 added):**
+  cheap default models (Haiku/Sonnet, never Opus by default — GC opts in per appetite), per-agent
+  `max_tokens` caps, extended thinking only where it pays, prompt caching on, AI only on explicit action.
+  Server `/api/assist` agent mode now clamps tokens + gates thinking. Build passes.
 - 2026-06-06 (v3.0 — **Phase 2 / Agents BUILT**) — AI & Knowledge area: `cfg_agents` CRUD (GC-only writes
   per existing rules — no rules redeploy needed), agent instruction **templates** + a model allowlist
   (`lib/agentTemplates.js`), a new **"agent" mode** in `/api/assist` that runs a configured instruction

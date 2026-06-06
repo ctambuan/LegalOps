@@ -104,9 +104,10 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return Response.json({ error: "Invalid request body." }, { status: 400 }); }
 
-  // Resolve the system prompt + user message + model. "agent" mode runs a configured agent: its
-  // instruction becomes the role prompt (under the fixed guardrail preamble), with the user's question.
-  let system, userText, model = MODEL;
+  // Resolve the system prompt + user message + model + cost controls. "agent" mode runs a configured
+  // agent: its instruction becomes the role prompt (under the fixed guardrail preamble). Cost discipline:
+  // output tokens are capped per call and extended thinking is opt-in (off by default).
+  let system, userText, model = MODEL, maxTokens = 8000, useThinking = true;
   if (body.mode === "agent") {
     const instruction = (body.instruction || "").trim();
     const question = (body.question || "").trim();
@@ -114,6 +115,8 @@ export async function POST(req) {
     system = AGENT_PREAMBLE + (instruction || "(no specific role configured — act as a careful general legal-operations assistant.)");
     userText = question;
     if (typeof body.model === "string" && ALLOWED_MODELS.includes(body.model)) model = body.model;
+    maxTokens = Math.min(8000, Math.max(256, Number(body.maxTokens) || 1024));
+    useThinking = body.thinking === true && maxTokens >= 2048; // thinking needs headroom; keep it cheap otherwise
   } else {
     system = SYSTEM;
     userText = buildUserMessage(body || {});
@@ -122,13 +125,14 @@ export async function POST(req) {
 
   try {
     const client = new Anthropic({ apiKey });
-    const message = await client.messages.create({
+    const params = {
       model,
-      max_tokens: 8000,
-      thinking: { type: "adaptive" },
+      max_tokens: maxTokens,
       system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userText }],
-    });
+    };
+    if (useThinking) params.thinking = { type: "adaptive" };
+    const message = await client.messages.create(params);
     const output = message.content
       .filter((b) => b.type === "text")
       .map((b) => b.text)

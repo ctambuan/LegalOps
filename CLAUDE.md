@@ -20,6 +20,18 @@ design, architect, and build in this repository. Follow it unless the user overr
    escalation path, an exposed secret, or any weak point — **stop, highlight it clearly to the user,
    and always propose a concrete fix**. Do not silently work around it or proceed as if it were fine.
 
+4. **Cost-efficiency is a feature, not an afterthought.** This dashboard exists to *cut* legal-ops cost —
+   it must run on **free or minimal-cost tiers** and never cost more than the manual work it replaces.
+   Weigh the running cost of every design, architecture, and stacking choice, and prefer the cheaper
+   option unless quality genuinely demands otherwise (call out the trade-off). Concretely:
+   - **AI:** default agents to the cheapest capable model (Haiku → Sonnet → Opus only when quality
+     clearly pays); cap `max_tokens` per use; keep prompt caching on; enable extended thinking only where
+     it earns its tokens; and **never make automatic/background AI calls** — AI runs only on an explicit
+     user action. The cost is per *run*, not per defined agent, so a large preset roster is free until used.
+   - **Infra:** stay within free tiers — Firestore (Spark), Vercel (Hobby), Firebase Auth, the admin's own
+     Gmail for invites. Don't introduce paid services/infrastructure without flagging the cost first.
+     Avoid wasteful Firestore reads (needless listeners / rule `get()`s) since reads are billed at scale.
+
 ## Architecture facts (stable — rely on these)
 
 - **Stack:** Next.js (App Router, client components) + Firebase (Firestore + Google Auth). Hosted on
