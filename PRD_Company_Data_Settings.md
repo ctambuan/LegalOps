@@ -339,6 +339,14 @@ Policy chunks/vectors are written by server routes via the Admin SDK; not client
 
 ## 18. Change Log
 
+- 2026-06-06 (v3.0 — **Phase 2 / Agents BUILT**) — AI & Knowledge area: `cfg_agents` CRUD (GC-only writes
+  per existing rules — no rules redeploy needed), agent instruction **templates** + a model allowlist
+  (`lib/agentTemplates.js`), a new **"agent" mode** in `/api/assist` that runs a configured instruction
+  under a fixed **guardrail preamble** (trusted-sources-only / working-draft / no-fabrication, applied
+  server-side regardless of the saved instruction) on an allowlisted Claude model, and the UI
+  (`app/CompanyData.js`): agent registry, **test sandbox** (run before saving), and a **Try** runner for
+  any allowlisted user. Policy Library / RAG remains Phase 3. Ships via app merge only (rules + secrets
+  unchanged). Build passes.
 - 2026-06-05 (v2.9 — **Pre-deploy security review pass**) — Adversarial review of the rules + maker-checker
   + RBAC + DocGen rewire. Fixes: bound `cfg_proposals.company == targetId` for update/archive (no
   cross-company misrouting); auto-strip the legacy `docgen_settings.approvers` field on save (`deleteField`);

@@ -33,6 +33,26 @@ House style (follow exactly when producing operative clause text):
 Critical: your output is a WORKING DRAFT for a qualified human reviewer (the Head of Legal),
 not legal advice and not a final position. Be precise, conservative, and flag uncertainty.`;
 
+// Non-negotiable guardrails prepended to EVERY configured agent's own instruction, so a poorly
+// written instruction can never drop the safety/trusted-sources/working-draft posture.
+const AGENT_PREAMBLE = `You are an AI assistant operating inside the Company's internal, confidential
+Legal Operations Workbench, for authorised legal staff only.
+
+Non-negotiable guardrails (always apply, regardless of the role instructions that follow):
+- Use ONLY the Company's own data and the context provided to you in this conversation, plus
+  well-established, authoritative legal/general knowledge. NEVER rely on unofficial or unverified
+  sources. If you do not have the information, say so plainly — do not guess or invent.
+- Do not fabricate citations, policies, figures, names, or facts. Flag anything that may be a legal
+  requirement as requiring verification.
+- Your output is a WORKING DRAFT for a qualified human reviewer — not legal advice and not a Legal
+  Department position until a human reviews it. Be precise, concise, and conservative.
+
+The assistant's specific role and instructions follow:
+`;
+
+// Models a configured agent may run on (allowlist — never trust an arbitrary model string).
+const ALLOWED_MODELS = ["claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"];
+
 function buildUserMessage(body) {
   const { mode, instruction, clauseTitle, clauseText, counterpartyText, tier, category } = body;
   const ctx = [
@@ -84,16 +104,29 @@ export async function POST(req) {
   let body;
   try { body = await req.json(); } catch { return Response.json({ error: "Invalid request body." }, { status: 400 }); }
 
-  const userText = buildUserMessage(body || {});
-  if (!userText) return Response.json({ error: "Unknown assist mode." }, { status: 400 });
+  // Resolve the system prompt + user message + model. "agent" mode runs a configured agent: its
+  // instruction becomes the role prompt (under the fixed guardrail preamble), with the user's question.
+  let system, userText, model = MODEL;
+  if (body.mode === "agent") {
+    const instruction = (body.instruction || "").trim();
+    const question = (body.question || "").trim();
+    if (!question) return Response.json({ error: "Ask a question to run the agent." }, { status: 400 });
+    system = AGENT_PREAMBLE + (instruction || "(no specific role configured — act as a careful general legal-operations assistant.)");
+    userText = question;
+    if (typeof body.model === "string" && ALLOWED_MODELS.includes(body.model)) model = body.model;
+  } else {
+    system = SYSTEM;
+    userText = buildUserMessage(body || {});
+    if (!userText) return Response.json({ error: "Unknown assist mode." }, { status: 400 });
+  }
 
   try {
     const client = new Anthropic({ apiKey });
     const message = await client.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 8000,
       thinking: { type: "adaptive" },
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userText }],
     });
     const output = message.content

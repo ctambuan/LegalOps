@@ -11,6 +11,7 @@ import {
   listenEntitySub, addEntitySub, saveEntitySub, deleteEntitySub,
   listenCfgProposals, proposeChange, decideCfgProposal,
   listenCfgThresholds, saveCfgThresholds, listenCfgApprovals, saveCfgApproval, seedCfgApprovals,
+  listenCfgAgents, addCfgAgent, saveCfgAgent, archiveCfgAgent,
 } from "../lib/data";
 import { ENTITIES, DEPARTMENTS, DEFAULT_THRESHOLDS, bucketLabel, approverCell } from "../lib/docgen";
 import {
@@ -18,13 +19,16 @@ import {
   canApprove, canEditEntity, canProposeEntity, canCreateEntity, canProposeNewEntity,
 } from "../lib/constants";
 import { useCompanyData } from "../lib/companyData";
-import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL } from "../lib/config";
+import { ALLOWED_USER_DOMAINS, USER_INVITE_EMAIL_ENABLED, APP_URL, AI_ASSIST_ENABLED } from "../lib/config";
 import { buildInvite, sendInviteViaGmail } from "../lib/invite";
+import { AGENT_TEMPLATES, AGENT_MODELS, DEFAULT_AGENT_MODEL } from "../lib/agentTemplates";
+import { callAssist } from "../lib/assist";
 
 export default function CompanyData({ tab, user, isReviewer, showToast }) {
   if (tab === "team") return <TeamAccess user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "entities") return <Entities user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "approval") return <ApprovalPolicy user={user} isReviewer={isReviewer} showToast={showToast} />;
+  if (tab === "ai") return <AiKnowledge user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "changes") return <ChangeRequests user={user} isReviewer={isReviewer} showToast={showToast} />;
   return <Planned tab={tab} />;
 }
@@ -841,6 +845,192 @@ function ApproverEditModal({ dept, cell, bandCols, user, showToast, onClose }) {
           <button className="btn ghost" onClick={onClose}>Cancel</button>
           <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save routing"}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ AI & Knowledge ------------------------------ */
+// Agents = saved Claude instructions the team can run. GC builds/edits (rules: cfg_agents GC-only);
+// any allowlisted user may run one. Server prepends fixed guardrails. Policy Library is Phase 3.
+function AiKnowledge({ user, isReviewer, showToast }) {
+  const [agents, setAgents] = useState(null);
+  const [modal, setModal] = useState(null); // { mode:'add'|'edit'|'try', agent? }
+  useEffect(() => listenCfgAgents(setAgents), []);
+  const list = (agents || []).filter((a) => a.status !== "archived");
+
+  const archive = async (a) => {
+    if (!confirm(`Archive agent "${a.name}"? It will be hidden from the team.`)) return;
+    try { await archiveCfgAgent(a._id, true, user); showToast("Agent archived"); }
+    catch (e) { console.error(e); showToast(e.message || "Failed"); }
+  };
+
+  return (
+    <>
+      <div className="lockmsg">AI agents are saved instructions the workbench runs on Claude.
+        {isReviewer ? " Build and edit them here — test each one before saving." : " Run one with the Try button."}
+        {" "}In Phase 3 agents will also retrieve from, and cite, the Policy Library.</div>
+      {!AI_ASSIST_ENABLED && <div className="lockmsg" style={{ borderColor: "var(--esc)" }}>AI is disabled by configuration (the deployment&rsquo;s AI key / flag is off). You can manage agents, but Run/Test is unavailable until it is enabled.</div>}
+
+      <div className="toolbar">
+        <span className="chip">{list.length} agents</span>
+        {isReviewer && <button className="btn primary sm" onClick={() => setModal({ mode: "add" })} style={{ marginLeft: "auto" }}>+ Add agent</button>}
+      </div>
+
+      {agents === null ? <div className="lockmsg">Loading…</div>
+        : list.length === 0 ? <div className="empty"><div className="big">No agents yet.</div>{isReviewer ? "Click “Add agent” to create your first." : "None configured."}</div> : (
+          <div className="grid">
+            {list.map((a) => (
+              <div key={a._id} className="clausecard" style={{ cursor: "default" }}>
+                <div className="ctitle">{a.name}</div>
+                <div className="cpurpose">{a.guardrails || (a.instruction || "").slice(0, 120) || "—"}</div>
+                <div className="cvariants" style={{ marginTop: 8 }}>
+                  <span className="vtag on">{(AGENT_MODELS.find((m) => m.id === a.model)?.label || "Claude Opus 4.8").split(" (")[0]}</span>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                  {AI_ASSIST_ENABLED && <button className="btn sm primary" onClick={() => setModal({ mode: "try", agent: a })}>Try</button>}
+                  {isReviewer && <button className="btn sm ghost" onClick={() => setModal({ mode: "edit", agent: a })}>Edit</button>}
+                  {isReviewer && <button className="btn sm ghost" onClick={() => archive(a)}>Archive</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+      <div className="sectlabel" style={{ marginTop: 22 }}><span className="t">Policy Library</span><span className="h">— Phase 3</span></div>
+      <div className="tbd"><div className="tbdtag">Planned · Phase 3</div><div className="big">Policy Library (RAG)</div>
+        <p>Upload policies (group-wide or per company); agents will retrieve and cite them in their answers. See <code>PRD_Company_Data_Settings.md</code> §9 &amp; §11.</p></div>
+
+      {modal?.mode === "try" && <TryAgentModal agent={modal.agent} showToast={showToast} onClose={() => setModal(null)} />}
+      {(modal?.mode === "add" || modal?.mode === "edit") && <AgentModal user={user} agent={modal.mode === "edit" ? modal.agent : null} showToast={showToast} onClose={() => setModal(null)} />}
+    </>
+  );
+}
+
+function AgentModal({ user, agent, showToast, onClose }) {
+  const editing = !!agent;
+  const [name, setName] = useState(agent?.name || "");
+  const [templateId, setTemplateId] = useState(agent?.instructionTemplateId || "policy_qa");
+  const [instruction, setInstruction] = useState(agent?.instruction
+    || AGENT_TEMPLATES.find((t) => t.id === "policy_qa")?.instruction || "");
+  const [guardrails, setGuardrails] = useState(agent?.guardrails || AGENT_TEMPLATES.find((t) => t.id === "policy_qa")?.guardrails || "");
+  const [model, setModel] = useState(agent?.model || DEFAULT_AGENT_MODEL);
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [out, setOut] = useState("");
+  const [err, setErr] = useState("");
+
+  const applyTemplate = (id) => {
+    setTemplateId(id);
+    const t = AGENT_TEMPLATES.find((x) => x.id === id);
+    if (t && t.id !== "custom") { setInstruction(t.instruction); setGuardrails(t.guardrails); }
+  };
+  const runTest = async () => {
+    setTesting(true); setErr(""); setOut("");
+    try { setOut(await callAssist("agent", { instruction, question: q, model })); }
+    catch (e) { setErr(e.message || "Test failed"); }
+    setTesting(false);
+  };
+
+  const valid = name.trim() && instruction.trim();
+  const save = async () => {
+    setBusy(true);
+    try {
+      const data = { name: name.trim(), instructionTemplateId: templateId, instruction: instruction.trim(), guardrails: guardrails.trim(), model, policyScope: "all" };
+      if (editing) await saveCfgAgent(agent._id, data, user); else await addCfgAgent(data, user);
+      showToast(editing ? "Agent saved" : "Agent created"); onClose();
+    } catch (e) { console.error(e); showToast(e.message || "Save failed — General Counsel only"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">{editing ? "Edit agent" : "New agent"}</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{name || "Configure an AI agent"}</div>
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          <div className="two">
+            <div className="field"><label>Agent name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Policy Q&A" /></div>
+            <div className="field"><label>Start from template</label>
+              <select value={templateId} onChange={(e) => applyTemplate(e.target.value)}>
+                {AGENT_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select></div>
+          </div>
+          <div className="field"><label>Instruction (the agent&rsquo;s role)</label>
+            <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} style={{ minHeight: 130 }}
+              placeholder="What should this agent do? How should it behave?" />
+            <div className="hint">Fixed safety guardrails (trusted sources only, working-draft, no fabrication) are always applied on top of this.</div>
+          </div>
+          <div className="two">
+            <div className="field"><label>Summary / guardrails (shown on the card)</label>
+              <input value={guardrails} onChange={(e) => setGuardrails(e.target.value)} placeholder="One-line description" /></div>
+            <div className="field"><label>Model</label>
+              <select value={model} onChange={(e) => setModel(e.target.value)}>
+                {AGENT_MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select></div>
+          </div>
+
+          {AI_ASSIST_ENABLED && (
+            <>
+              <div className="sectlabel"><span className="t">Test before saving</span><span className="h">— run it on a sample question</span></div>
+              <div className="field">
+                <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask the agent a sample question…" style={{ minHeight: 64 }} />
+                <div style={{ textAlign: "right", marginTop: 6 }}>
+                  <button className="btn sm primary" disabled={testing || !instruction.trim() || !q.trim()} onClick={runTest}>{testing ? "Running…" : "Run test"}</button>
+                </div>
+              </div>
+              {err && <div className="hint" style={{ color: "var(--oxblood)" }}>{err}</div>}
+              {out && <div className="note usage"><div className="nlab">Claude — working draft, verify before relying</div>
+                <div className="vtext" style={{ whiteSpace: "pre-wrap" }}>{out}</div></div>}
+            </>
+          )}
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Saving…" : editing ? "Save agent" : "Create agent"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TryAgentModal({ agent, showToast, onClose }) {
+  const [q, setQ] = useState("");
+  const [out, setOut] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const run = async () => {
+    setBusy(true); setErr(""); setOut("");
+    try { setOut(await callAssist("agent", { instruction: agent.instruction, question: q, model: agent.model })); }
+    catch (e) { setErr(e.message || "Failed"); }
+    setBusy(false);
+  };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 620 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">Run agent</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{agent.name}</div>
+          {agent.guardrails && <div className="purposenote"><span className="lab">Role</span><span className="txt">{agent.guardrails}</span></div>}
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          <div className="field">
+            <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask your question…" style={{ minHeight: 90 }} />
+            <div style={{ textAlign: "right", marginTop: 6 }}>
+              <button className="btn sm primary" disabled={busy || !q.trim()} onClick={run}>{busy ? "Thinking…" : "Ask"}</button>
+            </div>
+          </div>
+          {err && <div className="hint" style={{ color: "var(--oxblood)" }}>{err}</div>}
+          {out && <div className="note usage"><div className="nlab">Claude — working draft, verify before relying</div>
+            <div className="vtext" style={{ whiteSpace: "pre-wrap" }}>{out}</div></div>}
+        </div>
+        <div className="mfoot"><button className="btn ghost" onClick={onClose}>Close</button></div>
       </div>
     </div>
   );
