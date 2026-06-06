@@ -13,6 +13,7 @@ import {
   listenCfgThresholds, saveCfgThresholds, listenCfgApprovals, saveCfgApproval, seedCfgApprovals,
   listenCfgAgents, saveCfgAgentOverride, resetCfgAgent,
   listenCfgPolicies, addCfgPolicy, updateCfgPolicyMeta, archiveCfgPolicy,
+  listenRisks, addRisk, saveRisk,
 } from "../lib/data";
 import { retrievePolicyContext } from "../lib/policy";
 import { buildStructuredContext } from "../lib/structuredContext";
@@ -34,6 +35,7 @@ export default function CompanyData({ tab, user, isReviewer, showToast }) {
   if (tab === "entities") return <Entities user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "approval") return <ApprovalPolicy user={user} isReviewer={isReviewer} showToast={showToast} />;
   if (tab === "ai") return <AiKnowledge user={user} isReviewer={isReviewer} showToast={showToast} />;
+  if (tab === "risk") return <RiskRegister user={user} showToast={showToast} />;
   if (tab === "changes") return <ChangeRequests user={user} isReviewer={isReviewer} showToast={showToast} />;
   return <Planned tab={tab} />;
 }
@@ -1192,6 +1194,126 @@ function PolicyModal({ user, existing, showToast, onClose }) {
         <div className="mfoot">
           <button className="btn ghost" onClick={onClose}>Cancel</button>
           <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Indexing…" : "Add & index policy"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------ Risk Register ------------------------------ */
+// Operational legal-risk records, read-scoped by company. Any in-scope maker (incl. Country Counsel)
+// creates/edits; the Legal Risk Analyst agent reads these as grounding. Closed via status.
+const RISK_LEVELS = ["Low", "Medium", "High"];
+const RISK_STATUS = ["open", "mitigating", "closed"];
+
+function RiskRegister({ user, showToast }) {
+  const { role, companies } = useAuth();
+  const { entities } = useCompanyData();
+  const seesAll = companies === "all" || ["gc", "regional"].includes(normalizeRole(role));
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState("");
+  const [showClosed, setShowClosed] = useState(false);
+  const [edit, setEdit] = useState(null); // row or {} for new
+
+  useEffect(() => listenRisks({ seesAll, companies }, setRows), [seesAll, JSON.stringify(companies)]);
+
+  const canEdit = (company) => seesAll || (company !== "group" && Array.isArray(companies) && companies.includes(company));
+  const list = useMemo(() => {
+    const all = rows || [];
+    const t = q.trim().toLowerCase();
+    return all
+      .filter((r) => (showClosed || r.status !== "closed") && (!t || [r.title, r.company, r.owner, r.description].some((v) => String(v || "").toLowerCase().includes(t))))
+      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }, [rows, q, showClosed]);
+
+  return (
+    <>
+      <div className="lockmsg">The legal risk register, scoped to the companies you cover (plus group-wide risks).
+        In-scope counsel log and update risks here; the <b>Legal Risk Analyst</b> agent reads them as grounding.
+        Risks are <b>closed</b> (not deleted) when resolved.</div>
+      <div className="toolbar">
+        <div className="search">
+          <svg viewBox="0 0 24 24" fill="none" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></svg>
+          <input placeholder="Search risks — title, company, owner…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <span className="chip">{list.length} risks</span>
+        <label className="chip" style={{ cursor: "pointer" }}><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} style={{ marginRight: 6 }} />Show closed</label>
+        <button className="btn primary sm" onClick={() => setEdit({})} style={{ marginLeft: "auto" }}>+ Add risk</button>
+      </div>
+      {rows === null ? <div className="lockmsg">Loading…</div>
+        : list.length === 0 ? <div className="empty"><div className="big">No risks recorded.</div>Click <b>Add risk</b> to log the first one.</div> : (
+          <div className="tablewrap">
+            <table className="dtable">
+              <thead><tr><th>Risk</th><th>Company</th><th>Likelihood</th><th>Impact</th><th>Owner</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                {list.map((r) => (
+                  <tr key={r._id}>
+                    <td><b>{r.title}</b></td>
+                    <td>{r.company === "group" ? <span className="chip ok">group</span> : <span className="chip">{r.company}</span>}</td>
+                    <td>{r.likelihood || "—"}</td><td>{r.impact || "—"}</td>
+                    <td>{r.owner || <span style={{ color: "var(--ink3)" }}>—</span>}</td>
+                    <td><span className={"chip" + (r.status === "closed" ? "" : " ok")}>{r.status || "open"}</span></td>
+                    <td>{canEdit(r.company) && <button className="btn sm ghost" onClick={() => setEdit(r)}>Edit</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      {edit && <RiskModal user={user} row={edit._id ? edit : null} entities={entities} seesAll={seesAll} companies={companies} showToast={showToast} onClose={() => setEdit(null)} />}
+    </>
+  );
+}
+
+function RiskModal({ user, row, entities, seesAll, companies, showToast, onClose }) {
+  const [f, setF] = useState({
+    title: row?.title || "", company: row?.company || "group", description: row?.description || "",
+    likelihood: row?.likelihood || "Medium", impact: row?.impact || "Medium",
+    mitigation: row?.mitigation || "", owner: row?.owner || "", status: row?.status || "open",
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const inScope = (entities || []).filter((en) => seesAll || (Array.isArray(companies) && companies.includes(en.code)));
+  const valid = f.title.trim() && f.company;
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      if (row) await saveRisk(row._id, f, user); else await addRisk(f, user);
+      showToast(row ? "Risk updated" : "Risk added"); onClose();
+    } catch (e) { console.error(e); showToast(e.message || "Save failed — you may not cover this company"); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 560 }} onClick={(e) => e.stopPropagation()}>
+        <div className="mhead">
+          <div className="cnum">{row ? "Edit risk" : "Add risk"}</div>
+          <div className="ctitle" style={{ fontSize: 19, margin: "5px 0" }}>{f.title || "New legal risk"}</div>
+          <button className="mclose" onClick={onClose}>×</button>
+        </div>
+        <div className="mbody" style={{ paddingTop: 16 }}>
+          <div className="field"><label>Title</label><input value={f.title} onChange={set("title")} placeholder="Short risk name" /></div>
+          <div className="two">
+            <div className="field"><label>Applies to</label>
+              <select value={f.company} onChange={set("company")} disabled={!!row}>
+                <option value="group">Group-wide</option>
+                {inScope.map((en) => <option key={en._id || en.code} value={en.code}>{en.name} ({en.code})</option>)}
+              </select></div>
+            <div className="field"><label>Owner (optional)</label><input value={f.owner} onChange={set("owner")} placeholder="Responsible person" /></div>
+          </div>
+          <div className="field"><label>Description</label><textarea value={f.description} onChange={set("description")} style={{ minHeight: 70 }} placeholder="What is the risk?" /></div>
+          <div className="two">
+            <div className="field"><label>Likelihood</label><select value={f.likelihood} onChange={set("likelihood")}>{RISK_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}</select></div>
+            <div className="field"><label>Impact</label><select value={f.impact} onChange={set("impact")}>{RISK_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}</select></div>
+          </div>
+          <div className="field"><label>Mitigation (optional)</label><textarea value={f.mitigation} onChange={set("mitigation")} style={{ minHeight: 60 }} placeholder="Planned or in-place mitigation" /></div>
+          <div className="field"><label>Status</label><select value={f.status} onChange={set("status")}>{RISK_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+        </div>
+        <div className="mfoot">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !valid} onClick={save}>{busy ? "Saving…" : row ? "Save" : "Add risk"}</button>
         </div>
       </div>
     </div>

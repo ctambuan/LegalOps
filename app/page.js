@@ -149,6 +149,8 @@ export default function Page() {
       sub: "Entities with their directors, lines of business and authorized signers — the spine every tool reads from. Editable here in a later step of Phase 1." },
     approval: { eyebrow: "Governance rules", title: "Approval Policy",
       sub: "Approval thresholds and per-department routing. Editing replaces the hardcoded matrix the Document Number Generator uses today." },
+    risk: { eyebrow: "Legal risk register", title: "Risk Register",
+      sub: "Log and track legal risks, scoped to the companies you cover. The Legal Risk Analyst agent reads these as grounding." },
     ai: { eyebrow: "Agents & knowledge", title: "AI & Knowledge",
       sub: "Agents (templated instructions + a test sandbox) and the Policy Library that agents retrieve from. Phases 2–3." },
     changes: { eyebrow: "Maker-checker", title: "Change Requests",
@@ -196,6 +198,7 @@ export default function Page() {
                 <div className="subnav">
                   {CoSubItem("entities", "Entities (Records)")}
                   {CoSubItem("approval", "Approval Policy")}
+                  {CoSubItem("risk", "Risk Register")}
                   {CoSubItem("ai", "AI & Knowledge")}
                   {["gc", "hol"].includes(normalizeRole(role)) && CoSubItem("changes", "Change Requests")}
                   {isReviewer && CoSubItem("team", "Team & Access")}

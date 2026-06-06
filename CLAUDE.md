@@ -63,5 +63,11 @@ design, architect, and build in this repository. Follow it unless the user overr
 - Development branch for this work: `claude/elegant-hypatia-ACTT5`. Commit with clear messages; push
   only when asked or when a unit is complete and building.
 - Keep `PRD_Company_Data_Settings.md` in lockstep with the code — append to its Change Log.
+- **"update PRD" protocol (owner directive):** when the owner says *update PRD*, (1) update the repo PRD +
+  Change Log + version bump; (2) publish the latest to the Google Drive Workbench folder
+  (`DRIVE_FOLDER_ID`); (3) move the previous Drive copy into the Drive Archived subfolder
+  (`DRIVE_ARCHIVE_FOLDER_ID`), date/version-stamped; (4) the latest is the source for the next update.
+  If a Drive step can't be done automatically, say so and state the manual action — never silently skip.
+  See the PRD Maintenance Protocol at the top of `PRD_Company_Data_Settings.md`.
 - Reuse existing UI components/classes (`.toolbar`, `.dtable`, `.overlay/.modal`, review-queue classes)
   for visual consistency; reuse defined CSS tokens (`--base`, `--proh`, `--esc`, `--line`, `--ink3`).
