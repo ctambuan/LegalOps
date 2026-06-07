@@ -106,6 +106,16 @@ by default and is a deliberate scope escalation:
 - **Turn it off:** set `NEXT_PUBLIC_DRIVE_MANAGE=off`; the app falls back to the narrow `drive.file`
   scope and the archive panel disappears.
 
+### 10a. Unattended auto-archiving (Apps Script)
+The in-app panel above is **manual / on-demand**. For hands-off archiving — including the PRD Google
+Doc published by the Claude/MCP connector during "update PRD" (the connector can create/copy but not
+move/delete) — install the time-driven Apps Script in **`scripts/drive-archiver/`**. It keeps only the
+current PRD in the Workbench folder and moves superseded copies into **Archived** on a schedule.
+- Runs as the **GC's own Google identity** (no service-account key), moves rather than deletes
+  (reversible), and is **free** (Apps Script + a time trigger). Setup is a ~3-minute paste-and-run;
+  see `scripts/drive-archiver/README.md`.
+- The two are complementary: the in-app panel for ad-hoc moves, the script as the unattended safety net.
+
 ## 11. Task Tracker and Report module
 The **Task Tracker and Report** tab (Legal Service Request Management dashboard + Weekly Report)
 lets the team log matters per reporting period and have Claude draft a uniform, house-style weekly
